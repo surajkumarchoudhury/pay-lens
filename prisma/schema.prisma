@@ -1,4 +1,4 @@
-// PayLens Prisma setup — data models are added in a later step.
+// PayLens data model. Design rationale: docs/architecture.md, docs/decisions.md.
 
 generator client {
   provider = "prisma-client-js"
@@ -7,4 +7,192 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// ── Reference / lookup data ────────────────────────────────────────────────
+
+/// Single-org tenant settings. baseCurrency is the reporting currency.
+model Organization {
+  id           String   @id @default(cuid())
+  name         String
+  baseCurrency String   @default("USD")
+  createdAt    DateTime @default(now())
+}
+
+/// Stored FX snapshot. rateToUsd = value of 1 unit of this currency in USD.
+model Currency {
+  // columns
+  code      String  @id // ISO 4217, e.g. "USD", "INR"
+  name      String
+  symbol    String
+  rateToUsd Decimal @db.Decimal(18, 8)
+
+  // virtual navigation
+  countries     Country[]
+  salaryRecords SalaryRecord[]
+}
+
+model Country {
+  // columns
+  iso2         String @id // ISO 3166-1 alpha-2, e.g. "US"
+  name         String
+  currencyCode String // FK -> Currency (default currency of the country)
+
+  // virtual navigation
+  currency  Currency   @relation(fields: [currencyCode], references: [code])
+  employees Employee[]
+
+  @@index([currencyCode])
+}
+
+model Department {
+  // columns
+  id        String  @id @default(cuid())
+  name      String  @unique
+  avatarUrl String?
+
+  // virtual navigation
+  employees Employee[]
+}
+
+/// annualFactor converts a period amount to an annual amount
+/// (annual=1, monthly=12, hourly=2080 = 40h x 52w).
+model CompensationFrequency {
+  // columns
+  id           String @id @default(cuid())
+  label        String @unique
+  annualFactor Int
+
+  // virtual navigation
+  salaryRecords SalaryRecord[]
+}
+
+// ── Core domain ────────────────────────────────────────────────────────────
+
+model Employee {
+  // columns
+  id             String         @id @default(cuid())
+  employeeNumber String         @unique
+  firstName      String
+  lastName       String
+  email          String         @unique
+  avatarUrl      String?
+  gender         Gender
+  title          String // e.g. "Software Engineer"
+  level          EmployeeLevel
+  status         EmployeeStatus @default(ACTIVE)
+  isRemote       Boolean        @default(false)
+  hireDate       DateTime
+  dob            DateTime?
+  countryIso2    String // FK -> Country
+  departmentId   String // FK -> Department
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  // virtual navigation
+  country       Country        @relation(fields: [countryIso2], references: [iso2])
+  department    Department     @relation(fields: [departmentId], references: [id])
+  salaryRecords SalaryRecord[]
+  auditLogs     AuditLog[]
+
+  @@index([countryIso2])
+  @@index([departmentId])
+  @@index([level])
+  @@index([lastName])
+}
+
+/// A compensation record (not a payslip). History is preserved via non-current
+/// rows. basePayUsd and annualizedUsd are denormalized on write for fast analytics.
+model SalaryRecord {
+  // columns
+  id            String   @id @default(cuid())
+  employeeId    String // FK -> Employee
+  basePay       Decimal  @db.Decimal(16, 2)
+  totalComp     Decimal  @db.Decimal(16, 2)
+  currencyCode  String // FK -> Currency (currency the salary is paid in)
+  frequencyId   String // FK -> CompensationFrequency
+  basePayUsd    Decimal  @db.Decimal(16, 2) // basePay converted via rateToUsd
+  annualizedUsd Decimal  @db.Decimal(16, 2) // basePayUsd x annualFactor
+  effectiveDate DateTime
+  isCurrent     Boolean  @default(true)
+  version       Int      @default(1) // optimistic-concurrency guard
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // virtual navigation
+  employee  Employee              @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  currency  Currency              @relation(fields: [currencyCode], references: [code])
+  frequency CompensationFrequency @relation(fields: [frequencyId], references: [id])
+
+  @@index([employeeId])
+  @@index([currencyCode])
+  @@index([frequencyId])
+  @@index([isCurrent])
+  @@index([annualizedUsd])
+}
+
+/// Append-only audit trail of employee/salary mutations.
+model AuditLog {
+  // columns
+  id         String      @id @default(cuid())
+  employeeId String? // FK -> Employee (nullable)
+  action     AuditAction
+  entity     String // "Employee" | "SalaryRecord"
+  before     Json?
+  after      Json?
+  changedBy  String // user email
+  createdAt  DateTime    @default(now())
+
+  // virtual navigation
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@index([employeeId])
+  @@index([createdAt])
+}
+
+// ── Auth (provisioned users; login-only, no public sign-up) ─────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         UserRole @default(HR_MANAGER)
+  createdAt    DateTime @default(now())
+}
+
+// ── Enums ──────────────────────────────────────────────────────────────────
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  UNDISCLOSED
+}
+
+enum EmployeeLevel {
+  L1
+  L2
+  L3
+  L4
+  L5
+  L6
+  L7
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+enum UserRole {
+  HR_MANAGER
+  VIEWER
 }
