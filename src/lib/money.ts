@@ -25,3 +25,20 @@ export function fromUsd(amountUsd: number, rateToUsd: number): number {
 export function annualize(amountPerPeriod: number, annualFactor: number): number {
   return round2(amountPerPeriod * annualFactor);
 }
+
+/**
+ * Format an amount as currency using the currency's own symbol (e.g. ₹, €, $).
+ * Whole numbers by default — salaries read cleaner without cents.
+ */
+export function formatMoney(
+  amount: number,
+  currencyCode: string,
+  fractionDigits = 0,
+): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currencyCode,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(amount);
+}

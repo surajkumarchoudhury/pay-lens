@@ -59,11 +59,14 @@ export const DEPARTMENTS = [
   "Legal",
 ];
 
-/** annualFactor converts a per-period amount to an annual amount. */
+/**
+ * annualFactor converts a per-period amount to an annual amount. We model only
+ * salaried pay (Annual/Monthly); hourly pay maps to hourly *contractors*, a
+ * different worker classification we intentionally keep out of the employee set.
+ */
 export const FREQUENCIES = [
   { label: "Annual", annualFactor: 1 },
   { label: "Monthly", annualFactor: 12 },
-  { label: "Hourly", annualFactor: 2080 },
 ];
 
 export type ReferenceData = {

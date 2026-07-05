@@ -1,12 +1,24 @@
 import type { PrismaClient, Prisma, Gender, EmployeeStatus } from "@prisma/client";
 import { faker } from "@faker-js/faker";
 import { toUsd, annualize, fromUsd, round2 } from "../../src/lib/money";
+import { compaRatio } from "../../src/lib/salary-bands";
 import { type Level, buildTitle, targetAnnualUsd } from "./salaryBands";
 import { avatarUrl, type ReferenceData } from "./reference";
+
+/** Round to 4 decimals — the precision of the stored compaRatio column. */
+function round4(n: number): number {
+  return Math.round(n * 10_000) / 10_000;
+}
 
 const DEFAULT_COUNT = 10_000;
 const CHUNK = 2_000;
 const HISTORY_RATE = 0.2; // fraction of employees with a prior (raised-from) record
+
+// The first RICH_HISTORY_COUNT employees get a deep salary history (a long chain
+// of raises) so the detail page's history table has substantial data to show.
+const RICH_HISTORY_COUNT = 100;
+const RICH_MIN_RECORDS = 15;
+const RICH_MAX_RECORDS = 20;
 
 // Weighted distributions — a realistic pyramid, mixed gender, mostly active.
 const LEVEL_WEIGHTS: { weight: number; value: Level }[] = [
@@ -33,9 +45,8 @@ const STATUS_WEIGHTS: { weight: number; value: EmployeeStatus }[] = [
 ];
 
 const FREQ_WEIGHTS = [
-  { weight: 80, value: "Annual" },
+  { weight: 85, value: "Annual" },
   { weight: 15, value: "Monthly" },
-  { weight: 5, value: "Hourly" },
 ];
 
 function slug(s: string): string {
@@ -51,6 +62,8 @@ function buildComp(
   annualBaseUsd: number,
   rateToUsd: number,
   annualFactor: number,
+  level: Level,
+  countryIso2: string,
 ) {
   const bonusRatio = faker.number.float({ min: 0, max: 0.25 });
   const localBaseAnnual = fromUsd(annualBaseUsd, rateToUsd);
@@ -60,8 +73,54 @@ function buildComp(
   const totalComp = round2(localTotalAnnual / annualFactor);
   const basePayUsd = toUsd(basePay, rateToUsd);
   const annualizedUsd = annualize(basePayUsd, annualFactor);
+  const annualizedTotalUsd = annualize(toUsd(totalComp, rateToUsd), annualFactor);
+  // Denormalized so the app can filter/sort by band position without recomputing
+  // (compaRatio can't be null here: every seeded level/country has a midpoint).
+  const ratio = round4(compaRatio(annualizedUsd, level, countryIso2) ?? 1);
 
-  return { basePay, totalComp, basePayUsd, annualizedUsd };
+  return {
+    basePay,
+    totalComp,
+    basePayUsd,
+    annualizedUsd,
+    annualizedTotalUsd,
+    compaRatio: ratio,
+  };
+}
+
+/** Shape a computed comp into a SalaryRecord row (one per history entry). */
+function toRecord(
+  employeeId: string,
+  comp: ReturnType<typeof buildComp>,
+  currencyCode: string,
+  frequencyId: string,
+  effectiveDate: Date,
+  isCurrent: boolean,
+): Prisma.SalaryRecordCreateManyInput {
+  return {
+    id: faker.string.uuid(),
+    employeeId,
+    basePay: comp.basePay,
+    totalComp: comp.totalComp,
+    currencyCode,
+    frequencyId,
+    basePayUsd: comp.basePayUsd,
+    annualizedUsd: comp.annualizedUsd,
+    annualizedTotalUsd: comp.annualizedTotalUsd,
+    compaRatio: comp.compaRatio,
+    effectiveDate,
+    isCurrent,
+  };
+}
+
+/** `n` ascending effective dates, the first pinned to the hire date. */
+function ascendingDates(from: Date, n: number): Date[] {
+  const now = new Date();
+  const dates = [from];
+  for (let k = 1; k < n; k++) {
+    dates.push(faker.date.between({ from, to: now }));
+  }
+  return dates.sort((a, b) => a.getTime() - b.getTime());
 }
 
 export async function seedEmployees(
@@ -84,7 +143,11 @@ export async function seedEmployees(
 
     const firstName = faker.person.firstName();
     const lastName = faker.person.lastName();
-    const hireDate = faker.date.past({ years: 8 });
+    // Rich-history employees hired further back, so 15-20 raises can spread out.
+    const isRich = i < RICH_HISTORY_COUNT;
+    const hireDate = faker.date.past({
+      years: isRich ? faker.number.int({ min: 5, max: 8 }) : 8,
+    });
     const dob = faker.date.birthdate({ min: 22, max: 60, mode: "age" });
 
     const employeeId = faker.string.uuid();
@@ -107,48 +170,77 @@ export async function seedEmployees(
       departmentId: department.id,
     });
 
-    // Compensation for the current record.
+    // Compensation. `annualBaseUsd` is the current (latest) target; rate and
+    // frequency are shared by every record in an employee's history chain.
     const jitter = faker.number.float({ min: 0.85, max: 1.15 });
     const annualBaseUsd = round2(targetAnnualUsd(level, country.iso2) * jitter);
     const rate = rateFor(country.currencyCode);
     const freq = faker.helpers.weightedArrayElement(FREQ_WEIGHTS);
     const frequency = freqByLabel.get(freq)!;
+    const annualFactor = frequency.annualFactor;
 
-    const current = buildComp(annualBaseUsd, rate, frequency.annualFactor);
-    const hasHistory = faker.datatype.boolean(HISTORY_RATE);
-    const currentEffective = hasHistory
-      ? faker.date.between({ from: hireDate, to: new Date() })
-      : hireDate;
+    if (isRich) {
+      // A deep history: a chain of raises from a lower starting base up to the
+      // current pay, on ascending effective dates from hire to today.
+      const n = faker.number.int({ min: RICH_MIN_RECORDS, max: RICH_MAX_RECORDS });
+      const dates = ascendingDates(hireDate, n);
+      const startBaseUsd = round2(
+        annualBaseUsd * faker.number.float({ min: 0.45, max: 0.6 }),
+      );
+      for (let k = 0; k < n; k++) {
+        const t = n === 1 ? 1 : k / (n - 1);
+        // Geometric growth from start -> current, with slight per-step jitter.
+        const grown = startBaseUsd * (annualBaseUsd / startBaseUsd) ** t;
+        const isLatest = k === n - 1;
+        const baseUsd = isLatest
+          ? annualBaseUsd
+          : round2(grown * faker.number.float({ min: 0.98, max: 1.02 }));
+        const comp = buildComp(baseUsd, rate, annualFactor, level, country.iso2);
+        salaryRecords.push(
+          toRecord(
+            employeeId,
+            comp,
+            country.currencyCode,
+            frequency.id,
+            dates[k],
+            isLatest,
+          ),
+        );
+      }
+    } else {
+      const current = buildComp(annualBaseUsd, rate, annualFactor, level, country.iso2);
+      const hasHistory = faker.datatype.boolean(HISTORY_RATE);
+      const currentEffective = hasHistory
+        ? faker.date.between({ from: hireDate, to: new Date() })
+        : hireDate;
+      salaryRecords.push(
+        toRecord(
+          employeeId,
+          current,
+          country.currencyCode,
+          frequency.id,
+          currentEffective,
+          true,
+        ),
+      );
 
-    salaryRecords.push({
-      id: faker.string.uuid(),
-      employeeId,
-      basePay: current.basePay,
-      totalComp: current.totalComp,
-      currencyCode: country.currencyCode,
-      frequencyId: frequency.id,
-      basePayUsd: current.basePayUsd,
-      annualizedUsd: current.annualizedUsd,
-      effectiveDate: currentEffective,
-      isCurrent: true,
-    });
-
-    // Optional prior record (a raise): lower pay, effective at hire.
-    if (hasHistory) {
-      const priorBaseUsd = round2(annualBaseUsd * faker.number.float({ min: 0.8, max: 0.94 }));
-      const prior = buildComp(priorBaseUsd, rate, frequency.annualFactor);
-      salaryRecords.push({
-        id: faker.string.uuid(),
-        employeeId,
-        basePay: prior.basePay,
-        totalComp: prior.totalComp,
-        currencyCode: country.currencyCode,
-        frequencyId: frequency.id,
-        basePayUsd: prior.basePayUsd,
-        annualizedUsd: prior.annualizedUsd,
-        effectiveDate: hireDate,
-        isCurrent: false,
-      });
+      // Optional prior record (a single raise): lower pay, effective at hire.
+      if (hasHistory) {
+        const priorBaseUsd = round2(
+          annualBaseUsd * faker.number.float({ min: 0.8, max: 0.94 }),
+        );
+        const prior = buildComp(priorBaseUsd, rate, annualFactor, level, country.iso2);
+        salaryRecords.push(
+          toRecord(
+            employeeId,
+            prior,
+            country.currencyCode,
+            frequency.id,
+            hireDate,
+            false,
+          ),
+        );
+      }
     }
   }
 
