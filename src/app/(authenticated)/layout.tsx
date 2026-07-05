@@ -1,17 +1,22 @@
+import { redirect } from "next/navigation";
+
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
+import { getSession } from "@/lib/auth/session";
 
-export default function AuthenticatedLayout({
+export default async function AuthenticatedLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // TODO(auth): once auth is built, read the session here and
-  // `redirect("/login")` when there is none. The shell renders only for
-  // authenticated users, and the session's role will filter the sidebar.
+  // Authoritative auth check: the shell only renders for a valid session.
+  // Middleware does a coarse cookie check; this validates + resolves the user.
+  const user = await getSession();
+  if (!user) redirect("/login");
+
   return (
     <div className="flex h-screen flex-col overflow-hidden">
-      <Header />
+      <Header user={user} />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-y-auto p-6">{children}</main>

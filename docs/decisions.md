@@ -42,10 +42,12 @@ This file is the single home for "why / why-not." `architecture.md` describes *w
 **Decision:** PostgreSQL.
 **Reasoning:** SQLite is simplest to run but ephemeral on serverless (breaks "deployed software") and weaker at statistical aggregation. The data-access layer stays thin enough to swap engines if needed.
 
-## D9. Auth: Credentials + session timeouts, role-ready
-**Decision:** Auth.js with email/password (argon2). httpOnly, secure, sameSite cookie session with an idle timeout (~30 min) and an absolute timeout (~8 hr). A `role` field (`HR_MANAGER` | `VIEWER`) and an `authorize()` seam gate mutations.
-**Reasoning:** Demonstrates real auth understanding (hashing, sessions, timeouts appropriate for sensitive data, protected routes) without over-building. Timeouts matter because salary data is sensitive and terminals get left unattended.
-**Rejected — Google/SSO now:** needs external OAuth setup, brittle for a graded demo and deployed URL; documented as a straightforward production add-on. Session rotation is handled by the framework rather than hand-rolled refresh tokens.
+## D9. Auth: custom DB-backed sessions (credentials + timeouts, role-ready)
+**Decision:** Email/password (argon2id) with **server-side, database-backed sessions**. The cookie carries an opaque, crypto-random token (`crypto.randomBytes`) that is the PK of a `Session` row; it is `httpOnly`, `secure` (prod), `sameSite=lax`. Two independent expiries protect the data: an **idle timeout** (~30 min, via `lastActiveAt`, throttled slide) and an **absolute timeout** (~8 hr, via `expiresAt`). A coarse edge `middleware` checks cookie presence; the `(authenticated)` layout does the authoritative `getSession()` lookup + timeout enforcement. A `role` field (`HR_MANAGER` | `VIEWER`) with a `requireRole()` helper gates mutations. Login failures return an identical message for unknown-email vs wrong-password (with a dummy verify) to avoid account enumeration.
+**Reasoning:** Sensitive salary data needs **revocable** sessions (logout, timeout, admin kick) — server-side sessions give that for free, and idle+absolute timeouts matter for unattended terminals. A hand-written session (~150 lines) is small, fully testable, and demonstrates the security fundamentals directly.
+**Rejected — Auth.js (NextAuth v5) Credentials:** its Credentials provider forces **JWT sessions** (the DB-adapter path is for OAuth), and stateless JWTs can't be cleanly revoked server-side — which fights our revoke + timeout requirement. The library's value is mostly OAuth/provider plumbing we don't use.
+**Rejected — Lucia:** deprecated in 2025 (now a learning reference, not a maintained package).
+**Rejected — Google/SSO now:** needs external OAuth setup, brittle for a graded demo and deployed URL; a straightforward production add-on later.
 
 ## D10. No public sign-up — login-only, provisioned access
 **Decision:** No self-service registration. Users are provisioned (seeded now; admin-invite in future). Unauthenticated requests redirect to `/login`; unknown emails fail rather than create accounts.

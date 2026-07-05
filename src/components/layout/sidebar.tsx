@@ -47,8 +47,8 @@ export function Sidebar() {
               className={cn(
                 "flex flex-col items-center gap-1.5 rounded-lg border px-1 py-3 text-center transition-colors",
                 active
-                  ? "border-white bg-white/10 text-white dark:bg-black/25"
-                  : "border-transparent text-white/60 hover:bg-white/10 hover:text-white dark:hover:bg-black/20",
+                  ? "border-white/50 bg-white/10 text-white dark:border-white/35 dark:bg-black/25 dark:text-white/85"
+                  : "border-transparent text-white/60 hover:bg-white/10 hover:text-white dark:text-white/50 dark:hover:bg-black/20 dark:hover:text-white/85",
               )}
             >
               <Icon className="size-6 shrink-0" />

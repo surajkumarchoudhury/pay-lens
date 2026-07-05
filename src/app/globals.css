@@ -16,7 +16,10 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  /* Brand primary: tuned to the navy header tone (between --nav-from ~0.367
+     and --nav-to) so buttons/focus harmonize with the chrome rather than
+     reading darker. */
+  --primary: oklch(0.42 0.13 254);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
@@ -28,7 +31,8 @@
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  /* Focus ring uses the brand primary. */
+  --ring: oklch(0.42 0.13 254);
 
   --sidebar: oklch(0.973 0.011 250);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -44,14 +48,17 @@
   --nav-from: #00182f;
   --nav-to: #0a2643;
 
-  --background: oklch(0.145 0 0);
+  /* Dark surfaces: lifted background (not pure black) with lighter card/popover
+     used for the sign-in form and menus. */
+  --background: oklch(0.19 0 0);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
+  --card: oklch(0.24 0 0);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
+  --popover: oklch(0.24 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  /* Lighter navy in dark mode so primary buttons + focus ring stay visible. */
+  --primary: oklch(0.5 0.14 254);
+  --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -62,7 +69,7 @@
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.5 0.14 254);
 
   --sidebar: oklch(0.216 0.012 250);
   --sidebar-foreground: oklch(0.985 0 0);
@@ -122,5 +129,16 @@
     background-color: var(--background);
     color: var(--foreground);
     font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  }
+
+  /* Neutralize the browser autofill background so fields stay transparent
+     (Chrome otherwise paints its own pale-blue / dark-gray fill). */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--foreground);
+    -webkit-box-shadow: 0 0 0 1000px var(--card) inset;
+    caret-color: var(--foreground);
+    transition: background-color 9999s ease-in-out 0s;
   }
 }

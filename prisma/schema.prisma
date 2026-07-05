@@ -159,6 +159,28 @@ model User {
   passwordHash String
   role         UserRole @default(HR_MANAGER)
   createdAt    DateTime @default(now())
+
+  // virtual navigation
+  sessions Session[]
+}
+
+/// Server-side session. The opaque id is the cookie value (crypto-random, not a
+/// cuid), so sessions can be revoked. expiresAt = absolute timeout;
+/// lastActiveAt drives the idle timeout.
+model Session {
+  // columns
+  id           String   @id // crypto-random token; set explicitly, not defaulted
+  userId       String // FK -> User
+  expiresAt    DateTime
+  lastActiveAt DateTime @default(now())
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  // virtual navigation
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 // ── Enums ──────────────────────────────────────────────────────────────────
