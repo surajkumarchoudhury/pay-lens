@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: paylens-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: paylens
+      POSTGRES_PASSWORD: paylens
+      POSTGRES_DB: paylens
+    ports:
+      - "5432:5432"
+    volumes:
+      - paylens_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paylens -d paylens"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  paylens_pgdata:
