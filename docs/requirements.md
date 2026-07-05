@@ -28,13 +28,19 @@ The second point is the product's real value: not just a CRUD grid, but an **ins
 
 ## 4. Out of Scope (Deliberate) — and Why
 
+See [`decisions.md`](decisions.md) for full reasoning on each exclusion.
+
 | Excluded | Reasoning |
 |----------|-----------|
-| Employee self-service / multiple roles / RLS | Single-persona internal tool; multi-tenant security would be effort without value here |
-| Real payroll disbursement, tax engines, payslip PDFs | Out of the problem statement (management & insight, not payroll processing); high complexity, low assessment signal |
-| Live FX-rate API | Non-deterministic and untestable; a **stored FX snapshot** keeps analytics reproducible and unit-testable. Rates are modeled so a live feed could be swapped in later |
-| Approval workflows / notifications | Adds process complexity beyond the core "manage + understand salaries" goal |
-| Bulk Excel import | Valuable follow-up, but seeding + CRUD demonstrate the data model sufficiently within scope |
+| **Payroll processing & payslips** (earnings/deductions breakdown, PF/PT/income-tax, net pay, YTD, LOP) | PayLens manages **compensation records**, not per-period payroll artifacts. Payslips need per-country tax engines; cross-country comparison uses currency-normalized comp, not post-tax net pay |
+| **Full HRMS breadth** (attendance, leave, benefits, onboarding, ATS, performance) | Focused compensation + insights tool, not a greytHR/Workday-style suite; depth over breadth |
+| **Multi-tenancy / multiple organizations / org-switching** | Brief is a single organization; per-org isolation is a large commitment with no requirement |
+| **Public sign-up / self-registration** | Single org, not multi-tenant; open registration is inappropriate for sensitive salary data. Access is provisioned (login-only) |
+| **Real-time / live collaborative updates** | Only a small HR team operates the tool (no employee/self-service actors); lost-update risk is handled by optimistic concurrency instead |
+| **Per-row access control / RLS** | An HR manager is meant to see all salaries; access is capability-based (view vs edit), not row-partitioned |
+| **Live FX-rate API** | Non-deterministic and untestable; a **stored FX snapshot** keeps analytics reproducible. A live feed can be swapped in later |
+| **Multi-language i18n** | "Multiple countries" is a data property (currency), not UI language; single persona, one language. `Intl`-based money/date formatting is in scope |
+| Approval workflows / notifications, bulk Excel import | Beyond the core "manage + understand salaries" goal; seeding + CRUD demonstrate the model sufficiently |
 
 ## 5. Non-Functional Requirements
 
