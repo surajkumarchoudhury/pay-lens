@@ -9,10 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Tooltip } from "@/components/ui/tooltip";
 import { recordCompensationChange } from "@/app/(authenticated)/employees/[id]/actions";
 import { formatLongDate, todayLocal } from "@/lib/date";
+import { validateCompensationChange } from "@/lib/employee-schema";
 import { formatMoney } from "@/lib/money";
 import { bandPlacement, compaRatio, type Level } from "@/lib/salary-bands";
 import type { BandPlacement } from "@/lib/salary-bands";
 import { cn } from "@/lib/utils";
+
+/** Red border/ring applied to an input with an active validation error. */
+const invalidInputClass =
+  "border-destructive focus-visible:border-destructive focus-visible:ring-destructive/30";
 
 export type CurrentCompensation = {
   baseLocal: number;
@@ -139,10 +144,22 @@ function EditForm({
   current: CurrentCompensation;
   onDone: () => void;
 }) {
-  const [base, setBase] = useState(String(Math.round(current.baseLocal)));
-  const [total, setTotal] = useState(String(Math.round(current.totalLocal)));
-  const [error, setError] = useState<string | null>(null);
+  const initialBase = String(Math.round(current.baseLocal));
+  const initialTotal = String(Math.round(current.totalLocal));
+  const initialEffective = todayLocal();
+
+  const [base, setBase] = useState(initialBase);
+  const [total, setTotal] = useState(initialTotal);
+  const [effective, setEffective] = useState(initialEffective);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [generalError, setGeneralError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // Nothing to record until an input actually changes from what was loaded.
+  const dirty =
+    base !== initialBase ||
+    total !== initialTotal ||
+    effective !== initialEffective;
 
   const baseNum = Number(base);
   const ratio =
@@ -154,7 +171,40 @@ function EditForm({
         10
       : null;
 
-  function submit(formData: FormData) {
+  // Clear a field's error the moment it's edited.
+  function clearError(field: string) {
+    setErrors((prev) => {
+      if (!(field in prev)) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function submit() {
+    setGeneralError(null);
+    // Nothing changed — skip the write and just close the form.
+    if (!dirty) {
+      onDone();
+      return;
+    }
+    const clientErrors = validateCompensationChange({
+      annualBase: base,
+      annualTotal: total,
+      effectiveDate: effective,
+    });
+    if (clientErrors) {
+      setErrors(clientErrors);
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("employeeId", employeeId);
+    formData.set("expectedVersion", String(version));
+    formData.set("annualBase", base);
+    formData.set("annualTotal", total);
+    formData.set("effectiveDate", effective);
+
     startTransition(async () => {
       const result = await recordCompensationChange(
         { ok: false, error: null },
@@ -162,17 +212,27 @@ function EditForm({
       );
       if (result.ok) {
         onDone();
-      } else {
-        setError(result.error);
+        return;
       }
+      const serverErrors: Record<string, string> = {};
+      for (const fe of result.fieldErrors ?? []) {
+        serverErrors[fe.field] = fe.message;
+      }
+      setErrors(serverErrors);
+      setGeneralError(
+        Object.keys(serverErrors).length > 0 ? null : result.error,
+      );
     });
   }
 
   return (
-    <form action={submit} className="space-y-4">
-      <input type="hidden" name="employeeId" value={employeeId} />
-      <input type="hidden" name="expectedVersion" value={version} />
-
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+      className="space-y-4"
+    >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <AmountField
           label="Annual base pay"
@@ -180,7 +240,11 @@ function EditForm({
           symbol={current.currencySymbol}
           code={current.currencyCode}
           value={base}
-          onChange={setBase}
+          onChange={(v) => {
+            setBase(v);
+            clearError("annualBase");
+          }}
+          error={errors.annualBase}
         />
         <AmountField
           label="Annual total comp"
@@ -188,7 +252,11 @@ function EditForm({
           symbol={current.currencySymbol}
           code={current.currencyCode}
           value={total}
-          onChange={setTotal}
+          onChange={(v) => {
+            setTotal(v);
+            clearError("annualTotal");
+          }}
+          error={errors.annualTotal}
         />
       </div>
 
@@ -204,9 +272,19 @@ function EditForm({
             id="effectiveDate"
             name="effectiveDate"
             type="date"
-            defaultValue={todayLocal()}
-            className="w-44"
+            value={effective}
+            max={todayLocal()}
+            onChange={(e) => {
+              setEffective(e.target.value);
+              clearError("effectiveDate");
+            }}
+            className={cn("w-44", errors.effectiveDate && invalidInputClass)}
           />
+          {errors.effectiveDate && (
+            <p className="mt-1.5 text-xs text-destructive" role="alert">
+              {errors.effectiveDate}
+            </p>
+          )}
         </div>
 
         {/* Live preview of the resulting band position + change vs. current. */}
@@ -229,9 +307,9 @@ function EditForm({
         </div>
       </div>
 
-      {error && (
+      {generalError && (
         <p className="text-sm text-destructive" role="alert">
-          {error}
+          {generalError}
         </p>
       )}
 
@@ -298,6 +376,7 @@ function AmountField({
   code,
   value,
   onChange,
+  error,
 }: {
   label: string;
   name: string;
@@ -305,6 +384,7 @@ function AmountField({
   code: string;
   value: string;
   onChange: (v: string) => void;
+  error?: string;
 }) {
   return (
     <div>
@@ -327,12 +407,18 @@ function AmountField({
           inputMode="decimal"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="pl-8 pr-14 tabular-nums"
+          aria-invalid={error ? true : undefined}
+          className={cn("pl-8 pr-14 tabular-nums", error && invalidInputClass)}
         />
         <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
           {code}
         </span>
       </div>
+      {error && (
+        <p className="mt-1.5 text-xs text-destructive" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

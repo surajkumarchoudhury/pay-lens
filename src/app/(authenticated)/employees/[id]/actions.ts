@@ -7,25 +7,31 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/session";
 import { buildSalaryFields } from "@/lib/compensation";
 import { GENDER_OPTIONS } from "@/lib/employee-gender";
-import { employeeProfileSchema } from "@/lib/employee-schema";
+import {
+  compensationChangeSchema,
+  employeeProfileSchema,
+} from "@/lib/employee-schema";
 import { prisma } from "@/lib/prisma";
 import { compaRatio, type Level } from "@/lib/salary-bands";
 
-/** `useActionState` shape. `ok` closes the dialog; `error` renders inline. */
-export type RecordChangeState = { ok: boolean; error: string | null };
+/** One field-scoped validation message returned to the client. */
+export type ActionFieldError = { field: string; message: string };
 
-const schema = z.object({
+/**
+ * `useActionState` shape. `ok` closes the dialog; `error` is a general banner
+ * and `fieldErrors` highlight individual inputs (mirrors the profile form).
+ */
+export type RecordChangeState = {
+  ok: boolean;
+  error: string | null;
+  fieldErrors?: ActionFieldError[];
+};
+
+// Identity/concurrency inputs are hidden fields the UI controls, so they get a
+// minimal parse separate from the user-editable, schema-validated fields.
+const idSchema = z.object({
   employeeId: z.string().min(1),
-  // Optimistic-concurrency guard against the record being retired.
   expectedVersion: z.coerce.number().int().nonnegative(),
-  annualBase: z.coerce
-    .number({ error: "Enter a valid amount" })
-    .positive("Base pay must be greater than 0"),
-  annualTotal: z.coerce
-    .number({ error: "Enter a valid amount" })
-    .positive("Total comp must be greater than 0"),
-  // Optional; defaults to today. Local date string from an <input type="date">.
-  effectiveDate: z.string().optional(),
 });
 
 /**
@@ -41,22 +47,32 @@ export async function recordCompensationChange(
 ): Promise<RecordChangeState> {
   const user = await requireRole("HR_MANAGER");
 
-  const parsed = schema.safeParse({
+  const idParsed = idSchema.safeParse({
     employeeId: formData.get("employeeId"),
     expectedVersion: formData.get("expectedVersion"),
+  });
+  if (!idParsed.success) {
+    return { ok: false, error: "Invalid request" };
+  }
+  const { employeeId, expectedVersion } = idParsed.data;
+
+  const parsed = compensationChangeSchema.safeParse({
     annualBase: formData.get("annualBase"),
     annualTotal: formData.get("annualTotal"),
     effectiveDate: formData.get("effectiveDate"),
   });
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+    const fieldErrors: ActionFieldError[] = [];
+    for (const issue of parsed.error.issues) {
+      const field = String(issue.path[0] ?? "");
+      if (field && !fieldErrors.some((e) => e.field === field)) {
+        fieldErrors.push({ field, message: issue.message });
+      }
+    }
+    return { ok: false, error: "Please fix the highlighted fields", fieldErrors };
   }
 
-  const { employeeId, expectedVersion, annualBase, annualTotal } = parsed.data;
-
-  if (annualTotal < annualBase) {
-    return { ok: false, error: "Total comp can't be less than base pay" };
-  }
+  const { annualBase, annualTotal } = parsed.data;
 
   const employee = await prisma.employee.findUnique({
     where: { id: employeeId },
@@ -91,13 +107,16 @@ export async function recordCompensationChange(
   const effectiveDate = parsed.data.effectiveDate
     ? new Date(parsed.data.effectiveDate)
     : new Date();
-  if (Number.isNaN(effectiveDate.getTime())) {
-    return { ok: false, error: "Enter a valid effective date" };
-  }
   if (effectiveDate < currentRecord.effectiveDate) {
     return {
       ok: false,
-      error: "Effective date can't be before the current record",
+      error: "Please fix the highlighted fields",
+      fieldErrors: [
+        {
+          field: "effectiveDate",
+          message: "Effective date can't be before the current record",
+        },
+      ],
     };
   }
 

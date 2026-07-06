@@ -143,6 +143,43 @@ export const employeeProfileSchema = z
     }
   });
 
+/**
+ * Compensation-change form (the "Current compensation" editor). Only covers the
+ * user-editable fields — the compa-affecting inputs (currency, frequency, level,
+ * country) are resolved server-side. Shared so the client shows instant
+ * per-field errors and the server re-validates identically.
+ */
+export const compensationChangeSchema = z
+  .object({
+    annualBase: z.coerce
+      .number({ message: "Enter a valid amount" })
+      .positive("Base pay must be greater than 0"),
+    annualTotal: z.coerce
+      .number({ message: "Enter a valid amount" })
+      .positive("Total comp must be greater than 0"),
+    effectiveDate: z.string().optional().or(z.literal("")),
+  })
+  .superRefine((v, ctx) => {
+    if (
+      Number.isFinite(v.annualBase) &&
+      Number.isFinite(v.annualTotal) &&
+      v.annualTotal < v.annualBase
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["annualTotal"],
+        message: "Total comp can't be less than base pay",
+      });
+    }
+    if (v.effectiveDate && Number.isNaN(new Date(v.effectiveDate).getTime())) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["effectiveDate"],
+        message: "Enter a valid date",
+      });
+    }
+  });
+
 /** Turn a Zod safeParse failure into field → first-message. */
 function firstFieldErrors(
   issues: z.ZodIssue[],
@@ -172,6 +209,15 @@ export function validateEmployeeProfile(
   input: unknown,
 ): Record<string, string> | null {
   const result = employeeProfileSchema.safeParse(input);
+  if (result.success) return null;
+  return firstFieldErrors(result.error.issues);
+}
+
+/** Client-side per-field validation for the compensation-change form. */
+export function validateCompensationChange(
+  input: unknown,
+): Record<string, string> | null {
+  const result = compensationChangeSchema.safeParse(input);
   if (result.success) return null;
   return firstFieldErrors(result.error.issues);
 }
