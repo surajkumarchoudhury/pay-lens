@@ -4,133 +4,56 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
-  useSyncExternalStore,
+  useRef,
+  useState,
 } from "react";
 import type {
   ColumnOrderState,
   VisibilityState,
 } from "@tanstack/react-table";
 
+import {
+  ALL_IDS,
+  COLUMN_COOKIE_NAME,
+  DEFAULT_HIDDEN,
+  DEFAULT_STATE,
+  EMPLOYEE_COLUMN_META,
+  LOCKED_IDS,
+  type ColumnMeta,
+  type LayoutState,
+  isDefaultLayout,
+  normalizeOrder,
+  serializeColumnLayout,
+} from "@/lib/employee-columns";
+
 /**
- * Column layout (order + which columns are shown) is a per-user *display*
- * preference — not part of the shareable query — so it lives in localStorage
- * rather than the URL. This module is the single source of truth for the column
- * list; the table builds its ColumnDefs against these ids and the settings
- * popover renders these labels.
- *
- * localStorage is modeled as an external store (useSyncExternalStore) so reads
- * are SSR-safe (server snapshot = defaults) without a setState-in-effect
- * hydration hack, and writes notify every subscriber (and other tabs).
+ * Client provider for the employees table column layout. The layout is
+ * persisted in a cookie so the *server* can read it (see the employees page)
+ * and pass it in as `initialState` — this keeps SSR and the client's first
+ * render identical (no hydration mismatch) and shows the saved layout with no
+ * reflow flash. All the column constants + (de)serialization live in the plain
+ * `@/lib/employee-columns` module so both server and client can use them.
  */
 
-export type ColumnMeta = {
-  id: string;
-  label: string;
-  /** Locked columns are always shown, pinned first, and can't be dragged. */
-  locked?: boolean;
-};
+export { EMPLOYEE_COLUMN_META };
+export type { ColumnMeta };
 
-export const EMPLOYEE_COLUMN_META: ColumnMeta[] = [
-  { id: "name", label: "Employee", locked: true },
-  { id: "title", label: "Title" },
-  { id: "level", label: "Level" },
-  { id: "department", label: "Department" },
-  { id: "country", label: "Country" },
-  { id: "hireDate", label: "Hire date" },
-  { id: "effectiveDate", label: "Effective date" },
-  { id: "salary", label: "Annual base" },
-  { id: "totalComp", label: "Total comp" },
-  { id: "compa", label: "Compa-ratio" },
-  { id: "isRemote", label: "Work mode" },
-  { id: "status", label: "Status" },
-];
+// A year, so the preference survives comfortably; Lax + path=/ so it rides
+// along with normal same-site navigations. Not httpOnly — it's a display
+// preference the client writes directly.
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
-const ALL_IDS = EMPLOYEE_COLUMN_META.map((m) => m.id);
-const LOCKED_IDS = new Set(
-  EMPLOYEE_COLUMN_META.filter((m) => m.locked).map((m) => m.id),
-);
-const STORAGE_KEY = "paylens.employees.columns.v1";
-
-type LayoutState = { order: string[]; hidden: string[] };
-
-// Columns hidden out of the box to keep the default view focused; users can
-// switch them on via the "Columns" popover (choice persists in localStorage).
-const DEFAULT_HIDDEN = ["hireDate", "effectiveDate", "isRemote", "compa"];
-
-const DEFAULT_STATE: LayoutState = { order: ALL_IDS, hidden: DEFAULT_HIDDEN };
-
-function sameSet(a: string[], b: string[]): boolean {
-  return a.length === b.length && a.every((x) => b.includes(x));
-}
-
-/** Keep locked columns first, then the given order, dropping/adding as needed. */
-function normalizeOrder(order: string[]): string[] {
-  const known = order.filter((id) => ALL_IDS.includes(id));
-  const merged = [...known, ...ALL_IDS.filter((id) => !known.includes(id))];
-  const locked = merged.filter((id) => LOCKED_IDS.has(id));
-  const rest = merged.filter((id) => !LOCKED_IDS.has(id));
-  return [...locked, ...rest];
-}
-
-function sanitizeHidden(hidden: string[]): string[] {
-  return hidden.filter((id) => ALL_IDS.includes(id) && !LOCKED_IDS.has(id));
-}
-
-// ── External store backed by localStorage ──────────────────────────────────
-
-let cache: LayoutState | null = null;
-const listeners = new Set<() => void>();
-
-function readStorage(): LayoutState {
-  if (cache) return cache;
+function writeCookie(state: LayoutState) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<LayoutState>;
-      cache = {
-        order: normalizeOrder(parsed.order ?? ALL_IDS),
-        hidden: sanitizeHidden(parsed.hidden ?? []),
-      };
-      return cache;
-    }
+    document.cookie = `${COLUMN_COOKIE_NAME}=${serializeColumnLayout(
+      state,
+    )}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax`;
   } catch {
-    // Corrupt/unavailable storage → fall back to defaults.
+    // Ignore environments without document (shouldn't happen in a client comp).
   }
-  cache = DEFAULT_STATE;
-  return cache;
 }
-
-function writeStorage(next: LayoutState) {
-  cache = next;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  } catch {
-    // Ignore quota / private-mode failures.
-  }
-  listeners.forEach((l) => l());
-}
-
-function subscribe(onChange: () => void): () => void {
-  listeners.add(onChange);
-  const onStorage = (e: StorageEvent) => {
-    if (e.key === STORAGE_KEY) {
-      cache = null; // force re-read from the updated value
-      onChange();
-    }
-  };
-  window.addEventListener("storage", onStorage);
-  return () => {
-    listeners.delete(onChange);
-    window.removeEventListener("storage", onStorage);
-  };
-}
-
-// getSnapshot must return a stable reference while unchanged, else React loops.
-const getSnapshot = () => readStorage();
-const getServerSnapshot = () => DEFAULT_STATE;
-
-// ── Context ─────────────────────────────────────────────────────────────────
 
 type ColumnSettingsValue = {
   meta: ColumnMeta[];
@@ -153,55 +76,68 @@ type ColumnSettingsValue = {
 const ColumnSettingsContext = createContext<ColumnSettingsValue | null>(null);
 
 export function ColumnSettingsProvider({
+  initialState,
   children,
 }: {
+  /** Layout parsed from the cookie on the server; keeps SSR/CSR in sync. */
+  initialState?: LayoutState;
   children: React.ReactNode;
 }) {
-  const state = useSyncExternalStore(
-    subscribe,
-    getSnapshot,
-    getServerSnapshot,
-  );
+  const [state, setState] = useState<LayoutState>(initialState ?? DEFAULT_STATE);
+
+  // Persist to the cookie whenever the layout changes — but skip the very first
+  // run so the server-seeded initial layout isn't rewritten on mount. Handlers
+  // use functional updates, so none of them need the latest state closed over.
+  const skipPersist = useRef(true);
+  useEffect(() => {
+    if (skipPersist.current) {
+      skipPersist.current = false;
+      return;
+    }
+    writeCookie(state);
+  }, [state]);
 
   const setOrder = useCallback((next: ColumnOrderState) => {
-    writeStorage({ order: normalizeOrder(next), hidden: readStorage().hidden });
+    setState((cur) => ({ order: normalizeOrder(next), hidden: cur.hidden }));
   }, []);
 
   const setVisibility = useCallback((next: VisibilityState) => {
     const hidden = EMPLOYEE_COLUMN_META.filter(
       (m) => !m.locked && next[m.id] === false,
     ).map((m) => m.id);
-    writeStorage({ order: readStorage().order, hidden });
+    setState((cur) => ({ order: cur.order, hidden }));
   }, []);
 
   const toggle = useCallback((id: string) => {
     if (LOCKED_IDS.has(id)) return;
-    const cur = readStorage();
-    const hidden = cur.hidden.includes(id)
-      ? cur.hidden.filter((x) => x !== id)
-      : [...cur.hidden, id];
-    writeStorage({ order: cur.order, hidden });
+    setState((cur) => {
+      const hidden = cur.hidden.includes(id)
+        ? cur.hidden.filter((x) => x !== id)
+        : [...cur.hidden, id];
+      return { order: cur.order, hidden };
+    });
   }, []);
 
   const reorder = useCallback(
     (draggedId: string, targetId: string, position: "above" | "below") => {
       if (draggedId === targetId) return;
       if (LOCKED_IDS.has(draggedId) || LOCKED_IDS.has(targetId)) return;
-      const cur = readStorage();
-      // Remove first, then insert relative to the target's new index so the
-      // "above/below" intent maps cleanly regardless of drag direction.
-      const without = cur.order.filter((id) => id !== draggedId);
-      const targetIdx = without.indexOf(targetId);
-      if (targetIdx < 0) return;
-      const insertAt = position === "below" ? targetIdx + 1 : targetIdx;
-      without.splice(insertAt, 0, draggedId);
-      writeStorage({ order: normalizeOrder(without), hidden: cur.hidden });
+      setState((cur) => {
+        // Remove first, then insert relative to the target's new index so the
+        // "above/below" intent maps cleanly regardless of drag direction.
+        const without = cur.order.filter((id) => id !== draggedId);
+        const targetIdx = without.indexOf(targetId);
+        if (targetIdx < 0) return cur;
+        const insertAt = position === "below" ? targetIdx + 1 : targetIdx;
+        without.splice(insertAt, 0, draggedId);
+        return { order: normalizeOrder(without), hidden: cur.hidden };
+      });
     },
     [],
   );
 
   const reset = useCallback(() => {
-    writeStorage({ order: ALL_IDS, hidden: DEFAULT_HIDDEN });
+    setState({ order: ALL_IDS, hidden: DEFAULT_HIDDEN });
   }, []);
 
   const visibility = useMemo<VisibilityState>(() => {
@@ -218,17 +154,14 @@ export function ColumnSettingsProvider({
       order: state.order,
       visibility,
       hiddenCount: state.hidden.length,
-      isDefault:
-        sameSet(state.hidden, DEFAULT_HIDDEN) &&
-        state.order.length === ALL_IDS.length &&
-        state.order.every((id, i) => id === ALL_IDS[i]),
+      isDefault: isDefaultLayout(state),
       toggle,
       reorder,
       reset,
       setOrder,
       setVisibility,
     }),
-    [state.order, state.hidden, visibility, toggle, reorder, reset, setOrder, setVisibility],
+    [state, visibility, toggle, reorder, reset, setOrder, setVisibility],
   );
 
   return (

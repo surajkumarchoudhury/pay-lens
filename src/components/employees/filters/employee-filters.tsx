@@ -4,6 +4,7 @@ import type { EmployeeStatusId } from "@/lib/employee-status";
 import type { CurrencyOption } from "@/lib/employees";
 
 import type { OrgCurrency } from "../employees-table";
+import { AddEmployeeButton } from "./add-employee-button";
 import { ClearFiltersButton } from "./clear-filters-button";
 import { ColumnSettingsButton } from "./column-settings-button";
 import { CompensationFilter } from "./compensation-filter";
@@ -39,10 +40,12 @@ export function EmployeeFilters({
   currencies,
   orgCurrency,
   values,
+  canManage,
 }: {
   currencies: CurrencyOption[];
   orgCurrency: OrgCurrency;
   values: EmployeeFilterValues;
+  canManage: boolean;
 }) {
   return (
     <div className="flex items-start gap-2">
@@ -92,6 +95,7 @@ export function EmployeeFilters({
         />
         <ExportButton />
         <ColumnSettingsButton />
+        {canManage && <AddEmployeeButton />}
       </div>
     </div>
   );

@@ -12,7 +12,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronsUpDown, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -47,6 +47,7 @@ export function DataTable<T extends RowData>({
   onColumnOrderChange,
   onColumnVisibilityChange,
   pinnedColumnId,
+  isLoading,
   onRowClick,
 }: {
   data: T[];
@@ -60,6 +61,8 @@ export function DataTable<T extends RowData>({
   onColumnVisibilityChange?: (visibility: VisibilityState) => void;
   /** Column id kept pinned to the left while scrolling horizontally. */
   pinnedColumnId?: string;
+  /** Overlay a body-only loading state (header stays) while data is stale. */
+  isLoading?: boolean;
   onRowClick?: (row: T) => void;
 }) {
   const router = useRouter();
@@ -126,7 +129,18 @@ export function DataTable<T extends RowData>({
     .reduce((sum, col) => sum + col.getSize(), 0);
 
   return (
-    <div className="h-full overflow-auto rounded-xs border border-border/60 bg-card">
+    <div className="relative h-full overflow-auto rounded-xs border border-border/60 bg-card">
+      {isLoading && (
+        // z-20 sits above body cells (incl. the pinned column at z-10) but below
+        // the sticky header (thead z-20, later in the DOM) and pinned header
+        // (z-30), so the header stays crisp while the body reads as loading.
+        <div className="pointer-events-none absolute inset-0 z-20 flex justify-center bg-card/40">
+          <div className="mt-14 inline-flex h-fit items-center gap-2 rounded-full border border-border/60 bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm">
+            <Loader2 className="size-3.5 animate-spin" />
+            Loading…
+          </div>
+        </div>
+      )}
       <table
         className="w-full table-fixed text-sm text-foreground"
         style={{ minWidth }}
@@ -191,7 +205,7 @@ export function DataTable<T extends RowData>({
             </tr>
           ))}
         </thead>
-        <tbody>
+        <tbody className={cn(isLoading && "opacity-60")}>
           {table.getRowModel().rows.map((row) => (
             <tr
               key={row.id}

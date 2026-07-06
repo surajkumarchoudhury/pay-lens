@@ -1,16 +1,33 @@
+import { Suspense } from "react";
+import { cookies } from "next/headers";
+
 import { ColumnSettingsProvider } from "@/components/employees/column-settings";
+import {
+  COLUMN_COOKIE_NAME,
+  parseColumnLayout,
+} from "@/lib/employee-columns";
 import { EmployeeFilters } from "@/components/employees/filters/employee-filters";
 import { EmployeesTable } from "@/components/employees/employees-table";
+import { EmployeesTableSkeleton } from "@/components/employees/employees-table-skeleton";
 import { TablePagination } from "@/components/table-pagination";
+import { getSession } from "@/lib/auth/session";
 import { parseLevels } from "@/lib/employee-level";
 import { resolveSearchField } from "@/lib/employee-search";
 import { parseStatuses } from "@/lib/employee-status";
+import { resultsToken } from "@/lib/employees-url";
 import {
   getCurrencies,
   getOrgCurrency,
   listEmployees,
+  type CurrencyOption,
+  type EmployeeFilterParams,
   type SortDir,
 } from "@/lib/employees";
+
+type ListEmployeesParams = EmployeeFilterParams & {
+  page?: number;
+  pageSize?: number;
+};
 
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -64,43 +81,62 @@ export default async function EmployeesPage({
   const levels = parseLevels(first(sp.level));
   const statuses = parseStatuses(first(sp.status));
 
-  const [
-    { rows, total, page, pageSize, pageCount, sortBy, sortDir },
-    orgCurrency,
-    currencies,
-  ] = await Promise.all([
-    listEmployees({
-      page: parsePage(pageParam),
-      pageSize: parsePageSize(pageSizeParam),
-      sortBy: sortParam,
-      sortDir: dirParam as SortDir,
-      search: queryParam,
-      searchField,
-      salaryMin: parseAmount(salMinParam),
-      salaryMax: parseAmount(salMaxParam),
-      totalCompMin: parseAmount(compMinParam),
-      totalCompMax: parseAmount(compMaxParam),
-      compaMin: parseAmount(crMinParam),
-      compaMax: parseAmount(crMaxParam),
-      salaryCurrency: curParam,
-      levels,
-      statuses,
-      hireDateFrom,
-      hireDateTo,
-      effectiveDateFrom,
-      effectiveDateTo,
-    }),
+  // The filter bar needs org/currency reference + role; these are cheap and
+  // don't change per filter, so fetch them once here (outside the Suspense
+  // boundary) and keep the bar interactive while results reload.
+  const [orgCurrency, currencies, session, cookieStore] = await Promise.all([
     getOrgCurrency(),
     getCurrencies(),
+    getSession(),
+    cookies(),
   ]);
 
+  const canManage = session?.role === "HR_MANAGER";
+
+  // Read the saved column layout server-side so SSR renders the user's actual
+  // columns (no hydration mismatch, no first-paint reflow).
+  const columnLayout = parseColumnLayout(
+    cookieStore.get(COLUMN_COOKIE_NAME)?.value,
+  );
+
+  const filters: ListEmployeesParams = {
+    page: parsePage(pageParam),
+    pageSize: parsePageSize(pageSizeParam),
+    sortBy: sortParam,
+    sortDir: dirParam as SortDir,
+    search: queryParam,
+    searchField,
+    salaryMin: parseAmount(salMinParam),
+    salaryMax: parseAmount(salMaxParam),
+    totalCompMin: parseAmount(compMinParam),
+    totalCompMax: parseAmount(compMaxParam),
+    compaMin: parseAmount(crMinParam),
+    compaMax: parseAmount(crMaxParam),
+    salaryCurrency: curParam,
+    levels,
+    statuses,
+    hireDateFrom,
+    hireDateTo,
+    effectiveDateFrom,
+    effectiveDateTo,
+  };
+
+  // Token of the params this render was built for. The client table compares it
+  // against the live URL to show a body-only loading state (keeping the header)
+  // while a navigation is in flight. The skeleton below only covers first load.
+  const renderedToken = resultsToken((k) => {
+    const v = sp[k];
+    return Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
+  });
+
   return (
-    <ColumnSettingsProvider>
+    <ColumnSettingsProvider initialState={columnLayout}>
       <div className="flex h-full flex-col">
         <div>
           <EmployeeFilters
             currencies={currencies}
             orgCurrency={orgCurrency}
+            canManage={canManage}
             values={{
               query: queryParam,
               field: searchField,
@@ -120,31 +156,57 @@ export default async function EmployeesPage({
           />
         </div>
 
-        {rows.length === 0 ? (
-          <div className="mt-4 rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
-            No employees match your search.
-          </div>
-        ) : (
-          <>
-            <div className="mt-4 min-h-0 flex-1">
-              <EmployeesTable
-                rows={rows}
-                sortBy={sortBy}
-                sortDir={sortDir}
-                currencies={currencies}
-              />
-            </div>
-            <div className="-mx-4 shrink-0 border-t bg-background px-6 pt-3">
-              <TablePagination
-                page={page}
-                pageSize={pageSize}
-                total={total}
-                pageCount={pageCount}
-              />
-            </div>
-          </>
-        )}
+        <Suspense fallback={<EmployeesTableSkeleton />}>
+          <EmployeesResults
+            filters={filters}
+            currencies={currencies}
+            renderedToken={renderedToken}
+          />
+        </Suspense>
       </div>
     </ColumnSettingsProvider>
+  );
+}
+
+async function EmployeesResults({
+  filters,
+  currencies,
+  renderedToken,
+}: {
+  filters: ListEmployeesParams;
+  currencies: CurrencyOption[];
+  renderedToken: string;
+}) {
+  const { rows, total, page, pageSize, pageCount, sortBy, sortDir } =
+    await listEmployees(filters);
+
+  if (rows.length === 0) {
+    return (
+      <div className="mt-4 rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
+        No employees match your search.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="mt-4 min-h-0 flex-1">
+        <EmployeesTable
+          rows={rows}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          currencies={currencies}
+          renderedToken={renderedToken}
+        />
+      </div>
+      <div className="-mx-4 shrink-0 border-t bg-background px-6 pt-3">
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          pageCount={pageCount}
+        />
+      </div>
+    </>
   );
 }

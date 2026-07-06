@@ -493,6 +493,7 @@ export type EmployeeDetail = {
   hireDate: string; // ISO
   dob: string | null; // ISO
   department: string;
+  departmentId: string;
   country: string;
   countryIso2: string;
   /** All records, current first then most-recent effective date. */
@@ -524,6 +525,7 @@ export async function getEmployeeDetail(
       isRemote: true,
       hireDate: true,
       dob: true,
+      departmentId: true,
       department: { select: { name: true } },
       country: { select: { name: true, iso2: true } },
       salaryRecords: {
@@ -585,6 +587,7 @@ export async function getEmployeeDetail(
     hireDate: e.hireDate.toISOString(),
     dob: e.dob ? e.dob.toISOString() : null,
     department: e.department.name,
+    departmentId: e.departmentId,
     country: e.country.name,
     countryIso2: e.country.iso2,
     history,

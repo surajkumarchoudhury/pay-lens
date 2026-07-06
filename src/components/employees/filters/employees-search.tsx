@@ -79,7 +79,7 @@ export function EmployeesSearch({
   const suggestionsVisible = showSuggestions && term.trim().length > 0;
 
   return (
-    <form onSubmit={onSubmit} className="relative w-full min-w-[320px] max-w-md">
+    <form onSubmit={onSubmit} className="relative w-full min-w-[275px] max-w-sm">
       {/* Single combined control: the text field and the "Search by" selector
           share one bordered group, split by a divider. */}
       <div className="flex h-9 items-center rounded-xs border border-input bg-transparent transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30">
