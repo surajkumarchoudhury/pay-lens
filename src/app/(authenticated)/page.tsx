@@ -4,11 +4,13 @@ import {
   type DonutSlice,
 } from "@/components/analytics/donut-chart-card";
 import { HeadcountByDepartmentChart } from "@/components/analytics/headcount-by-department-chart";
+import { PayBreakdownCard } from "@/components/analytics/pay-breakdown-card";
 import { ExportDashboardPdf } from "@/components/analytics/export-dashboard-pdf";
 import {
   getDashboardStats,
   getGenderBreakdown,
   getHeadcountByDepartment,
+  getPayBreakdowns,
 } from "@/lib/analytics";
 
 const GENDER_META: Record<string, { label: string; color: string }> = {
@@ -20,10 +22,11 @@ const GENDER_META: Record<string, { label: string; color: string }> = {
 const GENDER_ORDER = ["MALE", "FEMALE", "OTHER", "UNDISCLOSED"];
 
 export default async function DashboardPage() {
-  const [stats, genderRows, headcountByDept] = await Promise.all([
+  const [stats, genderRows, headcountByDept, pay] = await Promise.all([
     getDashboardStats(),
     getGenderBreakdown(),
     getHeadcountByDepartment(),
+    getPayBreakdowns(),
   ]);
 
   const compaBand: DonutSlice[] = [
@@ -134,7 +137,35 @@ export default async function DashboardPage() {
           />
         </div>
 
+        <div className="grid gap-3 md:grid-cols-2">
+          <PayBreakdownCard
+            title="Pay by level"
+            description="Annual total comp (USD) · click a row to view employees"
+            groupLabel="Level"
+            rows={pay.byLevel}
+            csvFilename="pay-by-level"
+            drill="level"
+          />
+          <PayBreakdownCard
+            title="Pay by country"
+            description="Annual total comp (USD) · click a row to view employees"
+            groupLabel="Country"
+            rows={pay.byCountry}
+            csvFilename="pay-by-country"
+            drill="country"
+          />
+        </div>
+
         <HeadcountByDepartmentChart data={headcountByDept} />
+
+        <PayBreakdownCard
+          title="Pay by department"
+          description="Annual total comp (USD) · min · median · p90 · max · click a row to view employees"
+          groupLabel="Department"
+          rows={pay.byDepartment}
+          csvFilename="pay-by-department"
+          drill="department"
+        />
       </div>
     </div>
   );

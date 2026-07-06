@@ -1,6 +1,8 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { levelLabel, type EmployeeLevelId } from "@/lib/employee-level";
+import { summarize, type Summary } from "@/lib/stats";
 
 /**
  * Dashboard KPI figures. All monetary values are USD-normalized (matching the
@@ -80,6 +82,93 @@ export async function getHeadcountByDepartment(): Promise<
       headcount: g._count._all,
     }))
     .sort((a, b) => b.headcount - a.headcount);
+}
+
+/** One row of a pay breakdown: a group + its USD total-comp summary. */
+export type PayBreakdownRow = Summary & {
+  /** Stable id for drill-through (ISO-2 code / department id / level enum). */
+  key: string;
+  /** Human-readable group label. */
+  name: string;
+};
+
+export type PayBreakdowns = {
+  byCountry: PayBreakdownRow[];
+  byDepartment: PayBreakdownRow[];
+  byLevel: PayBreakdownRow[];
+};
+
+/**
+ * Pay distribution (min / median / p90 / max / mean) of current total comp, in
+ * USD, grouped three ways: by country, department and level. The workforce
+ * excludes terminated employees.
+ *
+ * We pull the per-record measure once and aggregate in memory rather than
+ * issuing three grouped `percentile_cont` queries: at ~10k current records the
+ * payload is tiny and the percentile math stays in a pure, unit-tested helper
+ * (`summarize`). If a single group ever grew to millions this would move to a
+ * DB-side ordered-set aggregate.
+ */
+export async function getPayBreakdowns(): Promise<PayBreakdowns> {
+  const [records, departments, countries] = await Promise.all([
+    prisma.salaryRecord.findMany({
+      where: { isCurrent: true, employee: { status: { not: "TERMINATED" } } },
+      select: {
+        annualizedTotalUsd: true,
+        employee: {
+          select: { level: true, countryIso2: true, departmentId: true },
+        },
+      },
+    }),
+    prisma.department.findMany({ select: { id: true, name: true } }),
+    prisma.country.findMany({ select: { iso2: true, name: true } }),
+  ]);
+
+  const deptName = new Map(departments.map((d) => [d.id, d.name]));
+  const countryName = new Map(countries.map((c) => [c.iso2, c.name]));
+
+  const byCountryVals = new Map<string, number[]>();
+  const byDeptVals = new Map<string, number[]>();
+  const byLevelVals = new Map<string, number[]>();
+
+  const push = (map: Map<string, number[]>, key: string, value: number) => {
+    const bucket = map.get(key);
+    if (bucket) bucket.push(value);
+    else map.set(key, [value]);
+  };
+
+  for (const r of records) {
+    const value = Number(r.annualizedTotalUsd);
+    push(byCountryVals, r.employee.countryIso2, value);
+    push(byDeptVals, r.employee.departmentId, value);
+    push(byLevelVals, r.employee.level, value);
+  }
+
+  const toRows = (
+    map: Map<string, number[]>,
+    label: (key: string) => string,
+  ): PayBreakdownRow[] =>
+    [...map.entries()].flatMap(([key, values]) => {
+      const summary = summarize(values);
+      return summary ? [{ key, name: label(key), ...summary }] : [];
+    });
+
+  const byMedianDesc = (a: PayBreakdownRow, b: PayBreakdownRow) =>
+    b.median - a.median;
+
+  return {
+    // Highest-paying first for country/department — the interesting outliers.
+    byCountry: toRows(byCountryVals, (k) => countryName.get(k) ?? k).sort(
+      byMedianDesc,
+    ),
+    byDepartment: toRows(byDeptVals, (k) => deptName.get(k) ?? k).sort(
+      byMedianDesc,
+    ),
+    // Levels read as a ladder, so keep them in L1→L7 order rather than by pay.
+    byLevel: toRows(byLevelVals, (k) => levelLabel(k as EmployeeLevelId)).sort(
+      (a, b) => a.key.localeCompare(b.key),
+    ),
+  };
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {
