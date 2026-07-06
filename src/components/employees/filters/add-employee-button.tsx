@@ -3,11 +3,6 @@ import { Plus } from "lucide-react";
 
 import { Tooltip } from "@/components/ui/tooltip";
 
-/**
- * Entry point to the create-employee flow. HR-only (rendered conditionally by
- * the toolbar). Uses the "Pay" brand red so the primary create action stands
- * out among the neutral view controls.
- */
 export function AddEmployeeButton() {
   return (
     <Tooltip label="Add employee">

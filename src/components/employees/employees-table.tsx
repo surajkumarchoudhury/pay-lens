@@ -15,7 +15,7 @@ import {
 } from "@/components/employees/badges";
 import { useCurrencyParam } from "@/components/employees/currency-select";
 import { useColumnSettings } from "@/components/employees/column-settings";
-import { formatMonthYear, formatShortDate } from "@/lib/date";
+import { formatMonthYear, formatShortDate, formatTenure } from "@/lib/date";
 import { revealedColumns } from "@/lib/employee-columns";
 import { genderLabel } from "@/lib/employee-gender";
 import type { CurrencyOption, EmployeeRow, SortDir } from "@/lib/employees";
@@ -32,19 +32,6 @@ declare module "@tanstack/react-table" {
 }
 
 export type OrgCurrency = { code: string; symbol: string };
-
-/** Whole-ish tenure from a hire date, e.g. "4y 2m", "7 mo", "1 yr". */
-function formatTenure(iso: string): string {
-  const months = Math.max(
-    0,
-    Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24 * 30.44)),
-  );
-  const years = Math.floor(months / 12);
-  const rem = months % 12;
-  if (years <= 0) return `${months} mo`;
-  if (rem === 0) return `${years} yr${years > 1 ? "s" : ""}`;
-  return `${years}y ${rem}m`;
-}
 
 export function EmployeesTable({
   rows,

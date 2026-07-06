@@ -10,12 +10,6 @@ import type { SalaryHistoryEntry } from "@/lib/employees";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-/**
- * Compensation history card. The table header is sticky so it stays visible as
- * the list grows and the page scrolls, and an effective-date range filter lives
- * beside the title. The change % for each row is computed against the *full*
- * history (the next-older record), so filtering the view never distorts it.
- */
 export function CompensationHistory({
   history,
 }: {

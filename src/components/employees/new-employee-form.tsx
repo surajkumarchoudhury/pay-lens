@@ -8,6 +8,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createEmployees } from "@/app/(authenticated)/employees/new/actions";
+import { todayLocal } from "@/lib/date";
 import { GENDER_OPTIONS } from "@/lib/employee-gender";
 import { LEVEL_OPTIONS } from "@/lib/employee-level";
 import { validateEmployeeRow } from "@/lib/employee-schema";
@@ -60,13 +61,6 @@ let rowSeq = 0;
 function nextKey(): string {
   rowSeq += 1;
   return `row-${rowSeq}`;
-}
-
-/** Today as YYYY-MM-DD in local time, for the hire-date default. */
-function todayLocal(): string {
-  const d = new Date();
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60_000).toISOString().slice(0, 10);
 }
 
 function blankRow(ref: Reference): Row {

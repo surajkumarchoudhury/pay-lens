@@ -17,6 +17,7 @@ import { resolveSearchField } from "@/lib/employee-search";
 import { parseStatuses } from "@/lib/employee-status";
 import { parseWorkMode } from "@/lib/employee-work-mode";
 import { resultsToken } from "@/lib/employees-url";
+import { first, parsePage, parsePageSize } from "@/lib/search-params";
 import {
   getCurrencies,
   getOrgCurrency,
@@ -30,20 +31,6 @@ type ListEmployeesParams = EmployeeFilterParams & {
   page?: number;
   pageSize?: number;
 };
-
-function first(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function parsePage(value: string | undefined): number {
-  const n = Number(value);
-  return Number.isInteger(n) && n > 0 ? n : 1;
-}
-
-function parsePageSize(value: string | undefined): number | undefined {
-  const n = Number(value);
-  return Number.isInteger(n) && n > 0 ? n : undefined;
-}
 
 /** Parse a non-negative number from a param; undefined when absent/bad. */
 function parseAmount(value: string | undefined): number | undefined {

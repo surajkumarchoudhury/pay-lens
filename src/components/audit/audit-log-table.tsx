@@ -15,11 +15,6 @@ const ACTION_STYLES: Record<string, string> = {
   DELETE: "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20",
 };
 
-/**
- * Organization-wide audit table (mirrors the gemini "Log History" layout):
- * User · Event · Resource · Name · Date, with each row expanding to a
- * field-level Old → New diff from the stored before/after snapshots.
- */
 export function AuditLogTable({ entries }: { entries: AuditEntry[] }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 

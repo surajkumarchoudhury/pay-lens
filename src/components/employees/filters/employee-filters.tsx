@@ -52,8 +52,6 @@ export function EmployeeFilters({
 }) {
   return (
     <div className="flex items-start gap-2">
-      {/* Filters wrap within their own flexible group so growing/adding facets
-          pushes onto a new line instead of shoving the view controls. */}
       <div className="flex flex-1 flex-wrap items-center gap-2">
         {/*
           Key by the committed query + field so the search input re-seeds its

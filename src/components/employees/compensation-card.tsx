@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip } from "@/components/ui/tooltip";
 import { recordCompensationChange } from "@/app/(authenticated)/employees/[id]/actions";
-import { formatLongDate } from "@/lib/date";
+import { formatLongDate, todayLocal } from "@/lib/date";
 import { formatMoney } from "@/lib/money";
 import { bandPlacement, compaRatio, type Level } from "@/lib/salary-bands";
 import type { BandPlacement } from "@/lib/salary-bands";
@@ -27,19 +27,6 @@ export type CurrentCompensation = {
   currencySymbol: string;
 };
 
-/** Today as YYYY-MM-DD in local time, for the date input default. */
-function todayLocal(): string {
-  const d = new Date();
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60_000).toISOString().slice(0, 10);
-}
-
-/**
- * Current-compensation card. For HR managers a pencil flips it into an inline
- * edit form (pre-populated), which records a *new* salary record via the server
- * action — the existing record is retired into history. No modal: editing
- * happens in place with Save / Cancel at the bottom.
- */
 export function CompensationCard({
   employeeId,
   level,

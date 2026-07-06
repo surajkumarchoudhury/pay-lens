@@ -22,21 +22,6 @@ import {
   serializeColumnLayout,
 } from "@/lib/employee-columns";
 
-/**
- * Client provider for the employees table column layout. The layout is
- * persisted in a cookie so the *server* can read it (see the employees page)
- * and pass it in as `initialState` — this keeps SSR and the client's first
- * render identical (no hydration mismatch) and shows the saved layout with no
- * reflow flash. All the column constants + (de)serialization live in the plain
- * `@/lib/employee-columns` module so both server and client can use them.
- */
-
-export { EMPLOYEE_COLUMN_META };
-export type { ColumnMeta };
-
-// A year, so the preference survives comfortably; Lax + path=/ so it rides
-// along with normal same-site navigations. Not httpOnly — it's a display
-// preference the client writes directly.
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 function writeCookie(state: LayoutState) {

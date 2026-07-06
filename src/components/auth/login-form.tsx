@@ -23,8 +23,7 @@ export function LoginForm() {
           name="email"
           type="email"
           autoComplete="username"
-          placeholder="hr@acme.com"
-          defaultValue="hr@acme.com"
+          placeholder="john@example.com"
           required
           disabled={pending}
         />
@@ -40,7 +39,6 @@ export function LoginForm() {
           type="password"
           autoComplete="current-password"
           placeholder="••••••••"
-          defaultValue="Password123!"
           required
           disabled={pending}
         />

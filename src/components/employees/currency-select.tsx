@@ -124,7 +124,7 @@ export function CurrencySelect({
           className={cn(
             "z-50 max-h-72 overflow-auto rounded-md bg-popover p-1 text-popover-foreground shadow-md focus-visible:outline-none",
             variant === "field"
-              ? "min-w-40 w-[var(--radix-dropdown-menu-trigger-width)]"
+              ? "min-w-40 w-(--radix-dropdown-menu-trigger-width)"
               : "w-40",
           )}
         >

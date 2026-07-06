@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 import type { DashboardStats } from "@/lib/analytics";
-import { formatMoney } from "@/lib/money";
+import { formatCompactMoney, formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 type Accent = "default" | "positive" | "warning";
@@ -20,16 +20,6 @@ const ACCENT_TEXT: Record<Accent, string> = {
   positive: "text-emerald-600 dark:text-emerald-400",
   warning: "text-amber-600 dark:text-amber-500",
 };
-
-/** "$1.5B", "$820.4K" — compact so large payrolls stay legible in a card. */
-function compactUsd(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
-}
 
 function KpiCard({
   label,
@@ -108,7 +98,7 @@ export function DashboardKpis({ stats }: { stats: DashboardStats }) {
       />
       <KpiCard
         label="Annual payroll"
-        value={compactUsd(stats.annualPayrollUsd)}
+        value={formatCompactMoney(stats.annualPayrollUsd)}
         sub={
           stats.avgTotalUsd != null
             ? `${formatMoney(Math.round(stats.avgTotalUsd), "USD")} avg / employee`

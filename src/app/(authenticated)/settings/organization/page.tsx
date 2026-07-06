@@ -23,8 +23,6 @@ export default async function OrganizationSettingsPage() {
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-      {/* Left: organization inspector. Sticky so it stays in view while the
-          exchange-rate table scrolls on the right. */}
       <aside className="shrink-0 lg:sticky lg:top-0 lg:w-[370px]">
         <OrganizationProfileCard
           name={org.name}

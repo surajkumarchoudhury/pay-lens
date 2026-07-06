@@ -18,13 +18,6 @@ export type AttributeValues = {
   workMode: WorkModeId | null;
 };
 
-/**
- * Consolidated "Attributes" facet: Level, Status, Gender (multi-select) and
- * Work mode (single-select) in one popover. They share the same pick-list UX,
- * so grouping them keeps the filter bar on one line. Each still owns its own URL
- * param (level/status/gender/mode); the popover holds a draft until Apply and
- * writes them all at once.
- */
 export function AttributesFilter({ value }: { value: AttributeValues }) {
   const router = useRouter();
   const pathname = usePathname();

@@ -42,3 +42,19 @@ export function formatMoney(
     maximumFractionDigits: fractionDigits,
   }).format(amount);
 }
+
+/**
+ * Compact currency for tight spots like KPI cards — "$1.5B", "$820.4K".
+ * Defaults to USD since most aggregate figures are USD-normalized.
+ */
+export function formatCompactMoney(
+  amount: number,
+  currencyCode = "USD",
+): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currencyCode,
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(amount);
+}

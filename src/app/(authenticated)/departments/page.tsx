@@ -1,9 +1,6 @@
 import { DepartmentsTable } from "@/components/departments/departments-table";
 import { listDepartments, type SortDir } from "@/lib/departments";
-
-function first(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
+import { first } from "@/lib/search-params";
 
 export default async function DepartmentsPage({
   searchParams,

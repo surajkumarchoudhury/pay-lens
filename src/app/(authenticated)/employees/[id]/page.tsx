@@ -61,8 +61,6 @@ export default async function EmployeeDetailPage({
 
   return (
     <div className="mx-auto flex flex-col gap-6 lg:flex-row lg:items-start">
-      {/* Left: Employee-details inspector panel. Sticky so it stays in view
-          while the compensation history scrolls on the right. */}
       <aside className="flex shrink-0 flex-col gap-3 lg:sticky lg:top-0 lg:w-[370px]">
         <Link
           href="/employees"
@@ -79,7 +77,6 @@ export default async function EmployeeDetailPage({
         />
       </aside>
 
-      {/* Right: compensation + history */}
       <div className="min-w-0 flex-1 space-y-12 pb-10">
         {currentComp && (
           <CompensationCard

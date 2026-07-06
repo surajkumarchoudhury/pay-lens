@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip } from "@/components/ui/tooltip";
 import { updateEmployeeProfile } from "@/app/(authenticated)/employees/[id]/actions";
-import { formatLongDate } from "@/lib/date";
+import { formatLongDate, formatTenure, todayLocal } from "@/lib/date";
 import { GENDER_OPTIONS } from "@/lib/employee-gender";
 import { LEVEL_OPTIONS } from "@/lib/employee-level";
 import { validateEmployeeProfile } from "@/lib/employee-schema";
@@ -47,25 +47,6 @@ const selectClass =
 
 const invalidClass =
   "border-destructive focus-visible:border-destructive focus-visible:ring-destructive/30";
-
-/** Whole-ish tenure from a hire date, e.g. "4y 2m", "7 mo", "1 yr". */
-function formatTenure(iso: string): string {
-  const months = Math.max(
-    0,
-    Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24 * 30.44)),
-  );
-  const years = Math.floor(months / 12);
-  const rem = months % 12;
-  if (years <= 0) return `${months} mo`;
-  if (rem === 0) return `${years} yr${years > 1 ? "s" : ""}`;
-  return `${years}y ${rem}m`;
-}
-
-function todayLocal(): string {
-  const d = new Date();
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60_000).toISOString().slice(0, 10);
-}
 
 function genderLabel(id: string): string {
   return GENDER_OPTIONS.find((o) => o.value === id)?.label ?? id;
