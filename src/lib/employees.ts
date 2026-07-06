@@ -131,6 +131,7 @@ export type EmployeeRow = {
   title: string;
   level: EmployeeLevel;
   status: EmployeeStatus;
+  gender: Gender;
   department: string;
   country: string;
   countryIso2: string;
@@ -214,6 +215,8 @@ export type EmployeeFilterParams = {
   salaryCurrency?: string;
   statuses?: EmployeeStatus[];
   levels?: EmployeeLevel[];
+  genders?: Gender[];
+  workMode?: "remote" | "onsite";
   hireDateFrom?: string; // ISO date (YYYY-MM-DD)
   hireDateTo?: string; // ISO date (YYYY-MM-DD)
   effectiveDateFrom?: string; // ISO date (YYYY-MM-DD)
@@ -271,6 +274,7 @@ const EMPLOYEE_ROW_SELECT = {
       title: true,
       level: true,
       status: true,
+      gender: true,
       isRemote: true,
       hireDate: true,
       department: { select: { name: true } },
@@ -303,6 +307,7 @@ function toEmployeeRow(r: SalaryRecordRow): EmployeeRow {
     title: e.title,
     level: e.level,
     status: e.status,
+    gender: e.gender,
     department: e.department.name,
     country: e.country.name,
     countryIso2: e.country.iso2,
@@ -360,6 +365,12 @@ async function buildCurrentSalaryQuery(params: EmployeeFilterParams): Promise<{
   }
   if (params.levels?.length) {
     employeeConditions.push({ level: { in: params.levels } });
+  }
+  if (params.genders?.length) {
+    employeeConditions.push({ gender: { in: params.genders } });
+  }
+  if (params.workMode) {
+    employeeConditions.push({ isRemote: params.workMode === "remote" });
   }
   const hireDate = dateRangeFilter(params.hireDateFrom, params.hireDateTo);
   if (hireDate) employeeConditions.push({ hireDate });

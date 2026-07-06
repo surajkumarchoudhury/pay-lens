@@ -21,6 +21,8 @@ export const RESULT_PARAM_KEYS = [
   "cur",
   "level",
   "status",
+  "gender",
+  "mode",
   "hireFrom",
   "hireTo",
   "effFrom",

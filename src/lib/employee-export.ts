@@ -9,6 +9,7 @@
  * the employee's local amount.
  */
 
+import { rowsToCsv } from "@/lib/csv";
 import type { CurrencyOption, EmployeeRow } from "@/lib/employees";
 import { statusLabel, type EmployeeStatusId } from "@/lib/employee-status";
 import { formatMoney, fromUsd } from "@/lib/money";
@@ -79,14 +80,9 @@ export const EXPORT_COLUMNS: Record<string, ExportColumn> = {
   },
 };
 
-/** Escape a single CSV field per RFC 4180 (quote if it holds , " or newline). */
-function escapeField(value: string): string {
-  return /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
-
 /**
  * Serialize rows to CSV using the given ordered column ids (unknown ids are
- * skipped). CRLF line endings for maximum spreadsheet compatibility.
+ * skipped). Escaping + CRLF line endings come from the shared `rowsToCsv`.
  */
 export function buildEmployeesCsv(
   rows: EmployeeRow[],
@@ -97,9 +93,8 @@ export function buildEmployeesCsv(
     .map((id) => EXPORT_COLUMNS[id])
     .filter((c): c is ExportColumn => Boolean(c));
 
-  const header = cols.map((c) => escapeField(c.title)).join(",");
-  const body = rows.map((r) =>
-    cols.map((c) => escapeField(c.value(r, ctx))).join(","),
-  );
-  return [header, ...body].join("\r\n");
+  return rowsToCsv([
+    cols.map((c) => c.title),
+    ...rows.map((r) => cols.map((c) => c.value(r, ctx))),
+  ]);
 }

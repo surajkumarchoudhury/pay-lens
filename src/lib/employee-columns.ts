@@ -22,6 +22,7 @@ export const EMPLOYEE_COLUMN_META: ColumnMeta[] = [
   { id: "level", label: "Level" },
   { id: "department", label: "Department" },
   { id: "country", label: "Country" },
+  { id: "gender", label: "Gender" },
   { id: "hireDate", label: "Hire date" },
   { id: "effectiveDate", label: "Effective date" },
   { id: "salary", label: "Annual base" },
@@ -43,7 +44,13 @@ export const LOCKED_IDS = new Set(
 
 // Columns hidden out of the box to keep the default view focused; users can
 // switch them on via the "Columns" popover (choice persists in the cookie).
-export const DEFAULT_HIDDEN = ["hireDate", "effectiveDate", "isRemote", "compa"];
+export const DEFAULT_HIDDEN = [
+  "gender",
+  "hireDate",
+  "effectiveDate",
+  "isRemote",
+  "compa",
+];
 
 export const DEFAULT_STATE: LayoutState = {
   order: ALL_IDS,
@@ -95,4 +102,43 @@ export function parseColumnLayout(raw: string | undefined | null): LayoutState {
 /** Serialize a layout for storage in the cookie value (URI-encoded JSON). */
 export function serializeColumnLayout(state: LayoutState): string {
   return encodeURIComponent(JSON.stringify(state));
+}
+
+/**
+ * Maps each filter URL param → the column that visualizes it. Used to
+ * temporarily reveal a hidden column while it has an active filter (e.g. a
+ * dashboard donut drills in on Gender), so the user can always see the
+ * dimension they filtered by. Multiple params (min/max, from/to) can point at
+ * the same column.
+ */
+const FILTER_TO_COLUMN: Record<string, string> = {
+  level: "level",
+  status: "status",
+  gender: "gender",
+  mode: "isRemote",
+  crMin: "compa",
+  crMax: "compa",
+  salMin: "salary",
+  salMax: "salary",
+  compMin: "totalComp",
+  compMax: "totalComp",
+  hireFrom: "hireDate",
+  hireTo: "hireDate",
+  effFrom: "effectiveDate",
+  effTo: "effectiveDate",
+};
+
+/**
+ * Column ids that should be force-shown because a filter is active on them.
+ * Display-only — never written to the layout cookie, so it doesn't disturb the
+ * user's saved preference; clearing the filter reverts the column to hidden.
+ */
+export function revealedColumns(
+  get: (key: string) => string | null | undefined,
+): string[] {
+  const ids = new Set<string>();
+  for (const [param, columnId] of Object.entries(FILTER_TO_COLUMN)) {
+    if (get(param)) ids.add(columnId);
+  }
+  return [...ids];
 }

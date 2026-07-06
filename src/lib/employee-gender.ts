@@ -14,3 +14,18 @@ export const GENDER_OPTIONS: { value: GenderId; label: string }[] = [
 ];
 
 export const GENDER_IDS = new Set<string>(GENDER_OPTIONS.map((o) => o.value));
+
+export function genderLabel(id: GenderId): string {
+  return GENDER_OPTIONS.find((o) => o.value === id)?.label ?? id;
+}
+
+/** Parse a comma-separated `gender` param into a de-duped list of valid ids. */
+export function parseGenders(raw: string | undefined): GenderId[] {
+  if (!raw) return [];
+  const seen = new Set<GenderId>();
+  for (const part of raw.split(",")) {
+    const id = part.trim().toUpperCase();
+    if (GENDER_IDS.has(id)) seen.add(id as GenderId);
+  }
+  return [...seen];
+}

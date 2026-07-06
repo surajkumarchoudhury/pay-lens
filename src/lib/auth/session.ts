@@ -29,6 +29,7 @@ export type SessionUser = {
   id: string;
   email: string;
   name: string;
+  avatarUrl: string | null;
   role: UserRole;
 };
 
@@ -98,7 +99,13 @@ export async function getSession(): Promise<SessionUser | null> {
   }
 
   const { user } = session;
-  return { id: user.id, email: user.email, name: user.name, role: user.role };
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    avatarUrl: user.avatarUrl,
+    role: user.role,
+  };
 }
 
 /** Destroy the current session (DB row + cookie). Call from a Server Action. */
