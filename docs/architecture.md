@@ -11,9 +11,9 @@ Describes *what* the system is and *how* it is structured. For *why* each choice
 | Data grid | **TanStack Table (server-driven)** | Pagination/sort/filter pushed to the DB for 10k rows |
 | Charts | **Recharts** | Analytics visualizations |
 | Database | **PostgreSQL** | Relational integrity, `DECIMAL` money, SQL aggregation |
-| ORM | **Prisma** | Type-safe queries, migrations, seeding (+ `$queryRaw` for analytics) |
+| ORM | **Prisma** | Type-safe queries, migrations, seeding; typed `groupBy`/`aggregate` for analytics |
 | Validation | **Zod** | Shared, testable validation at the server boundary |
-| Auth | **Auth.js (Credentials)** | argon2 passwords, cookie sessions with timeouts |
+| Auth | **Custom credential auth** | argon2 hashing; DB-backed sessions via an `HttpOnly` + `Secure` + `SameSite=Lax` cookie (idle + absolute timeouts); `HR_MANAGER` / `VIEWER` RBAC |
 | Tests | **Vitest** | Fast, deterministic unit tests of the logic layer |
 | Deploy | **Vercel + Neon Postgres** | Deployed URL; `docker-compose` for local Postgres |
 
@@ -35,7 +35,7 @@ Describes *what* the system is and *how* it is structured. For *why* each choice
 
 **Key principle:** the business-logic layer is **pure and deterministic** (no I/O), so it is unit-tested in isolation. The UI never touches the DB directly; only Server Actions do, via Prisma.
 
-## 3. Data Model (8 tables)
+## 3. Data Model (10 tables)
 
 ```mermaid
 erDiagram
@@ -47,6 +47,7 @@ erDiagram
     CompensationFrequency ||--o{ SalaryRecord : billedAs
     Employee ||--o{ SalaryRecord : hasComp
     Employee ||--o{ AuditLog : tracked
+    User ||--o{ Session : has
 ```
 
 - **Organization** — single row; `name`, `baseCurrency` (USD).
@@ -54,15 +55,17 @@ erDiagram
 - **Country** — `iso2` (PK), `name`, `currencyCode` -> Currency.
 - **Department** — `id`, `name`. Lightweight pay-by-department dimension.
 - **CompensationFrequency** — `id`, `label`, `annualFactor` (annual=1, monthly=12, hourly=2080).
-- **Employee** — identity, `email`, `employeeNumber`, `hireDate`, `dob`, `gender`, `level`, `status`, `isRemote`, `countryIso2` -> Country, `departmentId` -> Department.
-- **SalaryRecord** — `basePay` DECIMAL(16,2), `totalComp` DECIMAL(16,2), `currencyCode`, `frequencyId`, `basePayUsd`, `annualizedUsd`, `effectiveDate`, `isCurrent`, `updatedAt` (optimistic concurrency). History preserved via non-current records.
-- **AuditLog** — `employeeId`, `action`, `before` JSONB, `after` JSONB, `changedBy`, `createdAt`. Append-only.
+- **Employee** — identity, `email`, `employeeNumber`, `title`, `hireDate`, `dob`, `gender`, `level`, `status`, `isRemote`, `countryIso2` -> Country, `departmentId` -> Department.
+- **SalaryRecord** — `basePay` DECIMAL(16,2), `totalComp` DECIMAL(16,2), `currencyCode`, `frequencyId`, `basePayUsd`, `annualizedUsd`, `annualizedTotalUsd`, `compaRatio`, `effectiveDate`, `isCurrent`, `version` (optimistic concurrency). History preserved via non-current records.
+- **AuditLog** — `employeeId`, `action`, `entity`, `before` JSONB, `after` JSONB, `changedBy`, `createdAt`. Append-only.
 - **User** — `email`, `passwordHash`, `name`, `role` (`HR_MANAGER` | `VIEWER`).
+- **Session** — opaque crypto-random `id` (the cookie value), `userId` -> User, `expiresAt` (absolute timeout), `lastActiveAt` (idle timeout). Server-side, so sessions are revocable.
 
-### The three "smart" columns
+### The four denormalized-on-write columns
 1. **`Currency.rateToUsd`** — FX snapshot (deterministic, testable).
 2. **`SalaryRecord.basePayUsd`** — computed on write via `toUsd(basePay, currency)`; avoids per-query FX joins.
-3. **`SalaryRecord.annualizedUsd`** — `basePayUsd x annualFactor`; the single canonical value all cross-employee analytics compare on (solves currency *and* frequency mismatch).
+3. **`SalaryRecord.annualizedUsd`** / **`annualizedTotalUsd`** — `…Usd x annualFactor` for base and total comp; the canonical values all cross-employee analytics compare on (solves currency *and* frequency mismatch).
+4. **`SalaryRecord.compaRatio`** — `annualizedUsd / level+country band midpoint`; precomputed so band-position filtering/sorting is a single indexed lookup.
 
 ### Money & currency rules
 - All amounts stored as `DECIMAL` in the salary's native currency.
@@ -72,7 +75,7 @@ erDiagram
 
 - **Server-side pagination** — fetch only the visible page; never ship 10k rows to the browser.
 - **Indexes** on `countryIso2`, `departmentId`, `level`, and search columns (name/email/employeeNumber).
-- **DB-side aggregation** — analytics via SQL (`GROUP BY`, `percentile_cont`, `avg`) over the denormalized `annualizedUsd`, not in app memory.
+- **Aggregation** — coarse metrics (counts, sums, averages, group-bys) run DB-side via Prisma `groupBy`/`aggregate` over the denormalized USD columns. Percentile/median pay breakdowns pull the ~10k current records once and compute in a pure, unit-tested stats module — at this scale the payload is tiny and the percentile math stays deterministic and testable. (A DB-side ordered-set aggregate like `percentile_cont` is the escape hatch if any single group ever reached millions of rows.)
 - 10k rows is small for Postgres; the discipline is in the UI/query patterns, not raw scale.
 
 ## 5. Testing Strategy

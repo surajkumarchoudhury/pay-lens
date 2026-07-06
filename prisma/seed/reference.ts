@@ -11,12 +11,16 @@ import type {
  * currency normalization is deterministic and testable.
  */
 
-export const ORG = { name: "ACME Corporation", baseCurrency: "USD" };
-
 /** Deterministic initials avatar (no file storage, no real photos). */
 export function avatarUrl(seed: string): string {
   return `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(seed)}`;
 }
+
+export const ORG = {
+  name: "ACME Corporation",
+  baseCurrency: "USD",
+  avatarUrl: avatarUrl("ACME Corporation"),
+};
 
 export const CURRENCIES = [
   { code: "USD", name: "US Dollar", symbol: "$", rateToUsd: 1.0 },
@@ -59,11 +63,14 @@ export const DEPARTMENTS = [
   "Legal",
 ];
 
-/** annualFactor converts a per-period amount to an annual amount. */
+/**
+ * annualFactor converts a per-period amount to an annual amount. We model only
+ * salaried pay (Annual/Monthly); hourly pay maps to hourly *contractors*, a
+ * different worker classification we intentionally keep out of the employee set.
+ */
 export const FREQUENCIES = [
   { label: "Annual", annualFactor: 1 },
   { label: "Monthly", annualFactor: 12 },
-  { label: "Hourly", annualFactor: 2080 },
 ];
 
 export type ReferenceData = {
@@ -76,8 +83,17 @@ export type ReferenceData = {
 export async function seedReference(prisma: PrismaClient): Promise<ReferenceData> {
   await prisma.organization.upsert({
     where: { id: "org_acme" },
-    update: { name: ORG.name, baseCurrency: ORG.baseCurrency },
-    create: { id: "org_acme", name: ORG.name, baseCurrency: ORG.baseCurrency },
+    update: {
+      name: ORG.name,
+      baseCurrency: ORG.baseCurrency,
+      avatarUrl: ORG.avatarUrl,
+    },
+    create: {
+      id: "org_acme",
+      name: ORG.name,
+      baseCurrency: ORG.baseCurrency,
+      avatarUrl: ORG.avatarUrl,
+    },
   });
 
   for (const c of CURRENCIES) {

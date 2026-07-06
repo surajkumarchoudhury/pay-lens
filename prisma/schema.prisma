@@ -6,7 +6,11 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // App queries use the pooled connection; migrations/introspection use the
+  // direct one. On Neon these differ (pooler can't hold the session-level locks
+  // migrations need); locally both point at the same Postgres.
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 // ── Reference / lookup data ────────────────────────────────────────────────
@@ -15,6 +19,7 @@ datasource db {
 model Organization {
   id           String   @id @default(cuid())
   name         String
+  avatarUrl    String?
   baseCurrency String   @default("USD")
   createdAt    DateTime @default(now())
 }
@@ -102,22 +107,26 @@ model Employee {
 }
 
 /// A compensation record (not a payslip). History is preserved via non-current
-/// rows. basePayUsd and annualizedUsd are denormalized on write for fast analytics.
+/// rows. basePayUsd, annualizedUsd, annualizedTotalUsd and compaRatio are
+/// denormalized on write so analytics, cross-currency sorting and band-position
+/// filtering stay a single indexed lookup.
 model SalaryRecord {
   // columns
-  id            String   @id @default(cuid())
-  employeeId    String // FK -> Employee
-  basePay       Decimal  @db.Decimal(16, 2)
-  totalComp     Decimal  @db.Decimal(16, 2)
-  currencyCode  String // FK -> Currency (currency the salary is paid in)
-  frequencyId   String // FK -> CompensationFrequency
-  basePayUsd    Decimal  @db.Decimal(16, 2) // basePay converted via rateToUsd
-  annualizedUsd Decimal  @db.Decimal(16, 2) // basePayUsd x annualFactor
-  effectiveDate DateTime
-  isCurrent     Boolean  @default(true)
-  version       Int      @default(1) // optimistic-concurrency guard
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  employeeId         String // FK -> Employee
+  basePay            Decimal  @db.Decimal(16, 2)
+  totalComp          Decimal  @db.Decimal(16, 2)
+  currencyCode       String // FK -> Currency (currency the salary is paid in)
+  frequencyId        String // FK -> CompensationFrequency
+  basePayUsd         Decimal  @db.Decimal(16, 2) // basePay converted via rateToUsd
+  annualizedUsd      Decimal  @db.Decimal(16, 2) // basePayUsd x annualFactor
+  annualizedTotalUsd Decimal  @db.Decimal(16, 2) // totalComp in USD x annualFactor
+  compaRatio         Decimal  @db.Decimal(8, 4) // annualizedUsd / level+country band midpoint
+  effectiveDate      DateTime
+  isCurrent          Boolean  @default(true)
+  version            Int      @default(1) // optimistic-concurrency guard
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   // virtual navigation
   employee  Employee              @relation(fields: [employeeId], references: [id], onDelete: Cascade)
@@ -129,6 +138,8 @@ model SalaryRecord {
   @@index([frequencyId])
   @@index([isCurrent])
   @@index([annualizedUsd])
+  @@index([annualizedTotalUsd])
+  @@index([compaRatio])
 }
 
 /// Append-only audit trail of employee/salary mutations.
@@ -156,9 +167,32 @@ model User {
   id           String   @id @default(cuid())
   email        String   @unique
   name         String
+  avatarUrl    String?
   passwordHash String
   role         UserRole @default(HR_MANAGER)
   createdAt    DateTime @default(now())
+
+  // virtual navigation
+  sessions Session[]
+}
+
+/// Server-side session. The opaque id is the cookie value (crypto-random, not a
+/// cuid), so sessions can be revoked. expiresAt = absolute timeout;
+/// lastActiveAt drives the idle timeout.
+model Session {
+  // columns
+  id           String   @id // crypto-random token; set explicitly, not defaulted
+  userId       String // FK -> User
+  expiresAt    DateTime
+  lastActiveAt DateTime @default(now())
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  // virtual navigation
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 // ── Enums ──────────────────────────────────────────────────────────────────
