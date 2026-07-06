@@ -11,9 +11,11 @@ import { EmployeesTable } from "@/components/employees/employees-table";
 import { EmployeesTableSkeleton } from "@/components/employees/employees-table-skeleton";
 import { TablePagination } from "@/components/table-pagination";
 import { getSession } from "@/lib/auth/session";
+import { parseGenders } from "@/lib/employee-gender";
 import { parseLevels } from "@/lib/employee-level";
 import { resolveSearchField } from "@/lib/employee-search";
 import { parseStatuses } from "@/lib/employee-status";
+import { parseWorkMode } from "@/lib/employee-work-mode";
 import { resultsToken } from "@/lib/employees-url";
 import {
   getCurrencies,
@@ -80,6 +82,8 @@ export default async function EmployeesPage({
 
   const levels = parseLevels(first(sp.level));
   const statuses = parseStatuses(first(sp.status));
+  const genders = parseGenders(first(sp.gender));
+  const workMode = parseWorkMode(first(sp.mode));
 
   // The filter bar needs org/currency reference + role; these are cheap and
   // don't change per filter, so fetch them once here (outside the Suspense
@@ -115,6 +119,8 @@ export default async function EmployeesPage({
     salaryCurrency: curParam,
     levels,
     statuses,
+    genders,
+    workMode,
     hireDateFrom,
     hireDateTo,
     effectiveDateFrom,
@@ -148,6 +154,8 @@ export default async function EmployeesPage({
               compaMax: crMaxParam,
               levels,
               statuses,
+              genders,
+              workMode: workMode ?? null,
               hireDateFrom,
               hireDateTo,
               effectiveDateFrom,
@@ -182,7 +190,7 @@ async function EmployeesResults({
 
   if (rows.length === 0) {
     return (
-      <div className="mt-4 rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
+      <div className="mt-4 rounded-md border border-dashed px-12 py-24 text-center text-sm text-muted-foreground">
         No employees match your search.
       </div>
     );

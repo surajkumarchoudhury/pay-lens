@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip } from "@/components/ui/tooltip";
 import { updateEmployeeProfile } from "@/app/(authenticated)/employees/[id]/actions";
+import { formatLongDate } from "@/lib/date";
 import { GENDER_OPTIONS } from "@/lib/employee-gender";
 import { LEVEL_OPTIONS } from "@/lib/employee-level";
 import { validateEmployeeProfile } from "@/lib/employee-schema";
@@ -46,14 +47,6 @@ const selectClass =
 
 const invalidClass =
   "border-destructive focus-visible:border-destructive focus-visible:ring-destructive/30";
-
-function formatFullDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 /** Whole-ish tenure from a hire date, e.g. "4y 2m", "7 mo", "1 yr". */
 function formatTenure(iso: string): string {
@@ -105,11 +98,11 @@ export function EmployeeProfileCard({
     { label: "Employee ID", value: employee.employeeNumber },
     { label: "Department", value: employee.department },
     { label: "Country", value: employee.country },
-    { label: "Hire date", value: formatFullDate(employee.hireDate) },
+    { label: "Hire date", value: formatLongDate(employee.hireDate) },
     { label: "Tenure", value: formatTenure(employee.hireDate) },
     { label: "Gender", value: genderLabel(employee.gender) },
     ...(employee.dob
-      ? [{ label: "Date of birth", value: formatFullDate(employee.dob) }]
+      ? [{ label: "Date of birth", value: formatLongDate(employee.dob) }]
       : []),
   ];
 

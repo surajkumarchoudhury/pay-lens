@@ -5,17 +5,10 @@ import { Check, X } from "lucide-react";
 
 import { CompaBadge } from "@/components/employees/badges";
 import { Input } from "@/components/ui/input";
+import { formatLongDate } from "@/lib/date";
 import type { SalaryHistoryEntry } from "@/lib/employees";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
-
-function formatFullDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 /**
  * Compensation history card. The table header is sticky so it stays visible as
@@ -142,7 +135,7 @@ export function CompensationHistory({
                   <td className="py-2.5 pl-6 pr-4">
                     <div className="flex items-center gap-2">
                       <span className="whitespace-nowrap text-foreground">
-                        {formatFullDate(entry.effectiveDate)}
+                        {formatLongDate(entry.effectiveDate)}
                       </span>
                       {entry.isCurrent && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">

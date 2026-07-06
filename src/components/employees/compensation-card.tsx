@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip } from "@/components/ui/tooltip";
 import { recordCompensationChange } from "@/app/(authenticated)/employees/[id]/actions";
+import { formatLongDate } from "@/lib/date";
 import { formatMoney } from "@/lib/money";
 import { bandPlacement, compaRatio, type Level } from "@/lib/salary-bands";
 import type { BandPlacement } from "@/lib/salary-bands";
@@ -31,14 +32,6 @@ function todayLocal(): string {
   const d = new Date();
   const off = d.getTimezoneOffset();
   return new Date(d.getTime() - off * 60_000).toISOString().slice(0, 10);
-}
-
-function formatFullDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 /**
@@ -136,7 +129,7 @@ function ReadView({ current }: { current: CurrentCompensation }) {
         </Metric>
       </div>
       <p className="mt-4 text-xs text-muted-foreground">
-        Effective {formatFullDate(current.effectiveDate)}
+        Effective {formatLongDate(current.effectiveDate)}
       </p>
     </>
   );

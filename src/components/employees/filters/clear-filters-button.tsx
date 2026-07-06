@@ -23,6 +23,8 @@ const FILTER_PARAMS = [
   "crMax",
   "level",
   "status",
+  "gender",
+  "mode",
   "hireFrom",
   "hireTo",
   "effFrom",

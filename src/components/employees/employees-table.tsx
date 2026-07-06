@@ -15,6 +15,9 @@ import {
 } from "@/components/employees/badges";
 import { useCurrencyParam } from "@/components/employees/currency-select";
 import { useColumnSettings } from "@/components/employees/column-settings";
+import { formatMonthYear, formatShortDate } from "@/lib/date";
+import { revealedColumns } from "@/lib/employee-columns";
+import { genderLabel } from "@/lib/employee-gender";
 import type { CurrencyOption, EmployeeRow, SortDir } from "@/lib/employees";
 import { resultsToken } from "@/lib/employees-url";
 import { formatMoney, fromUsd } from "@/lib/money";
@@ -29,23 +32,6 @@ declare module "@tanstack/react-table" {
 }
 
 export type OrgCurrency = { code: string; symbol: string };
-
-/** "Mar 2021" — a hire date compact enough for a table cell. */
-function formatHireDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    year: "numeric",
-  });
-}
-
-/** "Mar 14, 2021" — the precise date, surfaced on hover. */
-function formatFullDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 /** Whole-ish tenure from a hire date, e.g. "4y 2m", "7 mo", "1 yr". */
 function formatTenure(iso: string): string {
@@ -90,6 +76,19 @@ export function EmployeesTable({
     setOrder,
     setVisibility,
   } = useColumnSettings();
+
+  // Temporarily reveal any hidden column that has an active filter (e.g. a
+  // dashboard donut drills in on Gender/Work mode), so the user can always see
+  // the dimension they filtered by. Display-only: it doesn't touch the saved
+  // layout, so the Columns picker still reflects the real preference and
+  // clearing the filter reverts the column to hidden.
+  const effectiveVisibility = useMemo(() => {
+    const revealed = revealedColumns((k) => searchParams.get(k));
+    if (revealed.length === 0) return columnVisibility;
+    const next = { ...columnVisibility };
+    for (const id of revealed) next[id] = true;
+    return next;
+  }, [columnVisibility, searchParams]);
 
   // Display currency comes from the shared `cur` URL param, set by the global
   // Currency control on the filter bar; null = Local (each row's own).
@@ -153,14 +152,21 @@ export function EmployeesTable({
     cell: ({ row }) => <span className="truncate">{row.original.country}</span>,
   },
   {
+    accessorKey: "gender",
+    header: "Gender",
+    size: 130,
+    enableSorting: false,
+    cell: ({ row }) => genderLabel(row.original.gender),
+  },
+  {
     accessorKey: "hireDate",
     header: "Hire date",
     size: 140,
     cell: ({ row }) => {
       const iso = row.original.hireDate;
       return (
-        <span title={`Hired ${formatFullDate(iso)} · ${formatTenure(iso)} tenure`}>
-          {formatHireDate(iso)}
+        <span title={`Hired ${formatShortDate(iso)} · ${formatTenure(iso)} tenure`}>
+          {formatMonthYear(iso)}
         </span>
       );
     },
@@ -171,7 +177,7 @@ export function EmployeesTable({
     size: 150,
     cell: ({ row }) => {
       const iso = row.original.effectiveDate;
-      return <span title={formatFullDate(iso)}>{formatHireDate(iso)}</span>;
+      return <span title={formatShortDate(iso)}>{formatMonthYear(iso)}</span>;
     },
   },
   {
@@ -221,6 +227,7 @@ export function EmployeesTable({
   },
   {
     id: "compa",
+    accessorKey: "compaRatio",
     header: "Compa-ratio",
     size: 150,
     cell: ({ row }) => (
@@ -247,7 +254,7 @@ export function EmployeesTable({
       sortDir={sortDir}
       meta={{ displayCurrency }}
       columnOrder={columnOrder}
-      columnVisibility={columnVisibility}
+      columnVisibility={effectiveVisibility}
       onColumnOrderChange={setOrder}
       onColumnVisibilityChange={setVisibility}
       pinnedColumnId="name"

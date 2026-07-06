@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../../src/lib/auth/password";
+import { avatarUrl } from "./reference";
 
 /**
  * Provisioned users (login-only, no public sign-up). Upserted by email.
@@ -19,10 +20,11 @@ export async function seedUsers(prisma: PrismaClient): Promise<void> {
   const passwordHash = await hashPassword(DEMO_PASSWORD);
 
   for (const u of USERS) {
+    const avatar = avatarUrl(u.name);
     await prisma.user.upsert({
       where: { email: u.email },
-      update: { name: u.name, role: u.role },
-      create: { ...u, passwordHash },
+      update: { name: u.name, role: u.role, avatarUrl: avatar },
+      create: { ...u, passwordHash, avatarUrl: avatar },
     });
   }
 }

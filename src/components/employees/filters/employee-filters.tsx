@@ -1,10 +1,13 @@
+import type { GenderId } from "@/lib/employee-gender";
 import type { EmployeeLevelId } from "@/lib/employee-level";
 import type { SearchFieldId } from "@/lib/employee-search";
 import type { EmployeeStatusId } from "@/lib/employee-status";
+import type { WorkModeId } from "@/lib/employee-work-mode";
 import type { CurrencyOption } from "@/lib/employees";
 
 import type { OrgCurrency } from "../employees-table";
 import { AddEmployeeButton } from "./add-employee-button";
+import { AttributesFilter } from "./attributes-filter";
 import { ClearFiltersButton } from "./clear-filters-button";
 import { ColumnSettingsButton } from "./column-settings-button";
 import { CompensationFilter } from "./compensation-filter";
@@ -12,8 +15,6 @@ import { CurrencyFilter } from "./currency-filter";
 import { DateFilter } from "./date-filter";
 import { EmployeesSearch } from "./employees-search";
 import { ExportButton } from "./export-button";
-import { LevelFilter } from "./level-filter";
-import { StatusFilter } from "./status-filter";
 
 export type EmployeeFilterValues = {
   query: string;
@@ -26,6 +27,8 @@ export type EmployeeFilterValues = {
   compaMax: string;
   levels: EmployeeLevelId[];
   statuses: EmployeeStatusId[];
+  genders: GenderId[];
+  workMode: WorkModeId | null;
   hireDateFrom: string;
   hireDateTo: string;
   effectiveDateFrom: string;
@@ -74,8 +77,14 @@ export function EmployeeFilters({
             compaMax: values.compaMax,
           }}
         />
-        <LevelFilter value={values.levels} />
-        <StatusFilter value={values.statuses} />
+        <AttributesFilter
+          value={{
+            levels: values.levels,
+            statuses: values.statuses,
+            genders: values.genders,
+            workMode: values.workMode,
+          }}
+        />
         <DateFilter
           values={{
             hireDateFrom: values.hireDateFrom,
@@ -86,8 +95,6 @@ export function EmployeeFilters({
         />
         <ClearFiltersButton />
       </div>
-      {/* View controls (how data is shown) sit apart from the filters and stay
-          pinned to the right, top-aligned as the filters wrap. */}
       <div className="flex shrink-0 items-center gap-2">
         <CurrencyFilter
           currencies={currencies}

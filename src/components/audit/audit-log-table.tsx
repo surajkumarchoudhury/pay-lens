@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
 import type { AuditEntry } from "@/lib/audit";
+import { formatDateTime } from "@/lib/date";
 import { cn } from "@/lib/utils";
 
 const ACTION_STYLES: Record<string, string> = {
@@ -13,16 +14,6 @@ const ACTION_STYLES: Record<string, string> = {
   UPDATE: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
   DELETE: "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20",
 };
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 /**
  * Organization-wide audit table (mirrors the gemini "Log History" layout):

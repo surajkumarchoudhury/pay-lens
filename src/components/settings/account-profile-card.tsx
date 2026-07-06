@@ -2,58 +2,50 @@
 
 import { useState, useTransition } from "react";
 import { Pencil } from "lucide-react";
+import type { UserRole } from "@prisma/client";
 
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip } from "@/components/ui/tooltip";
-import { updateOrganization } from "@/app/(authenticated)/settings/organization/actions";
 import { formatLongDate } from "@/lib/date";
-import type { CurrencyOption } from "@/lib/employees";
-import { cn } from "@/lib/utils";
+import { updateAccountProfile } from "@/app/(authenticated)/settings/account/actions";
+
+const ROLE_LABEL: Record<UserRole, string> = {
+  HR_MANAGER: "HR Manager",
+  VIEWER: "Read-only",
+};
 
 type Props = {
   name: string;
+  email: string;
   avatarUrl: string | null;
-  baseCurrency: string;
-  employeeCount: number;
-  departmentCount: number;
+  role: UserRole;
   createdAt: string; // ISO
-  currencies: CurrencyOption[];
-  canEdit: boolean;
 };
 
-/** Compact base-currency label for the pill, e.g. "USD ($)". */
-function compactCurrency(currencies: CurrencyOption[], code: string): string {
-  const c = currencies.find((x) => x.code === code);
-  return c ? `${c.code} (${c.symbol})` : code;
-}
-
 /**
- * Organization profile card. For HR managers a pencil flips it into an inline
- * edit form (name + reporting/base currency); the change persists via the
- * server action and is recorded in the audit trail. Viewers see read-only.
+ * Personal account card. A pencil flips it into an inline edit form for the
+ * user's own display name; email and role are read-only. Every signed-in user
+ * can edit their own profile — no role gate.
  */
-export function OrganizationProfileCard({
+export function AccountProfileCard({
   name,
+  email,
   avatarUrl,
-  baseCurrency,
-  employeeCount,
-  departmentCount,
+  role,
   createdAt,
-  currencies,
-  canEdit,
 }: Props) {
   const [editing, setEditing] = useState(false);
 
   return (
     <div className="relative rounded-xs border border-border/60 bg-card p-5">
-      {canEdit && !editing && (
-        <Tooltip label="Edit organization">
+      {!editing && (
+        <Tooltip label="Edit profile">
           <button
             type="button"
             onClick={() => setEditing(true)}
-            aria-label="Edit organization"
+            aria-label="Edit profile"
             className="absolute right-3 top-3 rounded-xs p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <Pencil className="size-4" />
@@ -65,8 +57,6 @@ export function OrganizationProfileCard({
         <EditForm
           name={name}
           avatarUrl={avatarUrl}
-          baseCurrency={baseCurrency}
-          currencies={currencies}
           onDone={() => setEditing(false)}
         />
       ) : (
@@ -81,22 +71,16 @@ export function OrganizationProfileCard({
           </h2>
           <div className="mt-2">
             <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-              Base currency · {compactCurrency(currencies, baseCurrency)}
+              {ROLE_LABEL[role]}
             </span>
           </div>
 
           <div className="my-4 border-t border-border/60" />
 
           <dl className="space-y-0.5">
-            <InfoRow
-              label="Employees"
-              value={employeeCount.toLocaleString("en-US")}
-            />
-            <InfoRow
-              label="Departments"
-              value={departmentCount.toLocaleString("en-US")}
-            />
-            <InfoRow label="Created" value={formatLongDate(createdAt)} />
+            <InfoRow label="Email" value={email} />
+            <InfoRow label="Role" value={ROLE_LABEL[role]} />
+            <InfoRow label="Member since" value={formatLongDate(createdAt)} />
           </dl>
         </>
       )}
@@ -121,25 +105,20 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 function EditForm({
   name: initialName,
   avatarUrl: initialAvatarUrl,
-  baseCurrency: initialCurrency,
-  currencies,
   onDone,
 }: {
   name: string;
   avatarUrl: string | null;
-  baseCurrency: string;
-  currencies: CurrencyOption[];
   onDone: () => void;
 }) {
   const [name, setName] = useState(initialName);
   const [avatarUrl, setAvatarUrl] = useState(initialAvatarUrl ?? "");
-  const [baseCurrency, setBaseCurrency] = useState(initialCurrency);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function submit(formData: FormData) {
     startTransition(async () => {
-      const result = await updateOrganization(
+      const result = await updateAccountProfile(
         { ok: false, error: null },
         formData,
       );
@@ -155,19 +134,19 @@ function EditForm({
     <form action={submit} className="space-y-4">
       <div className="flex flex-col items-center gap-3">
         <Avatar
-          name={name || "Organization"}
+          name={name || "?"}
           src={avatarUrl || null}
           className="size-20 rounded-xs text-2xl"
         />
         <div className="w-full">
           <label
-            htmlFor="org-avatar"
+            htmlFor="account-avatar"
             className="mb-1.5 block text-xs font-medium text-foreground"
           >
-            Logo URL
+            Avatar URL
           </label>
           <Input
-            id="org-avatar"
+            id="account-avatar"
             name="avatarUrl"
             type="url"
             inputMode="url"
@@ -177,50 +156,26 @@ function EditForm({
             autoComplete="off"
           />
           <p className="mt-1.5 text-xs text-muted-foreground">
-            Leave blank to use the name initials.
+            Leave blank to use your name initials.
           </p>
         </div>
       </div>
 
       <div>
         <label
-          htmlFor="org-name"
+          htmlFor="account-name"
           className="mb-1.5 block text-xs font-medium text-foreground"
         >
-          Organization name
+          Display name
         </label>
         <Input
-          id="org-name"
+          id="account-name"
           name="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={120}
           autoComplete="off"
         />
-      </div>
-
-      <div>
-        <label
-          htmlFor="org-currency"
-          className="mb-1.5 block text-xs font-medium text-foreground"
-        >
-          Base currency
-        </label>
-        <select
-          id="org-currency"
-          name="baseCurrency"
-          value={baseCurrency}
-          onChange={(e) => setBaseCurrency(e.target.value)}
-          className={cn(
-            "flex h-10 w-full cursor-pointer rounded-xs border border-input bg-transparent px-3 py-2 text-sm transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
-          )}
-        >
-          {currencies.map((c) => (
-            <option key={c.code} value={c.code}>
-              {c.code} · {c.name} ({c.symbol})
-            </option>
-          ))}
-        </select>
       </div>
 
       {error && (

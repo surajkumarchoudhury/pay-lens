@@ -1,18 +1,12 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import type {
   ColumnOrderState,
   VisibilityState,
 } from "@tanstack/react-table";
+
+import { useUpdateEffect } from "@/hooks/use-update-effect";
 
 import {
   ALL_IDS,
@@ -85,17 +79,10 @@ export function ColumnSettingsProvider({
 }) {
   const [state, setState] = useState<LayoutState>(initialState ?? DEFAULT_STATE);
 
-  // Persist to the cookie whenever the layout changes — but skip the very first
-  // run so the server-seeded initial layout isn't rewritten on mount. Handlers
-  // use functional updates, so none of them need the latest state closed over.
-  const skipPersist = useRef(true);
-  useEffect(() => {
-    if (skipPersist.current) {
-      skipPersist.current = false;
-      return;
-    }
-    writeCookie(state);
-  }, [state]);
+  // Persist to the cookie whenever the layout changes — skipping the initial
+  // render so the server-seeded layout isn't rewritten on mount. Handlers use
+  // functional updates, so none of them need the latest state closed over.
+  useUpdateEffect(() => writeCookie(state), [state]);
 
   const setOrder = useCallback((next: ColumnOrderState) => {
     setState((cur) => ({ order: normalizeOrder(next), hidden: cur.hidden }));
