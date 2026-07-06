@@ -110,7 +110,7 @@ export function CompensationHistory({
           {/* Column header sticks just below the 60px-tall sticky card header.
               Styled to match the employees table: bolder, taller, primary tint. */}
           <thead className="sticky top-15 z-10">
-            <tr className="text-left text-sm font-semibold text-foreground [&>th]:h-10 [&>th]:border-b [&>th]:border-border/60 [&>th]:bg-[color-mix(in_oklab,var(--color-primary)_5%,var(--color-card))]">
+            <tr className="text-left text-xs font-medium text-foreground [&>th]:h-10 [&>th]:border-b [&>th]:border-border/60 [&>th]:bg-[color-mix(in_oklab,var(--color-primary)_5%,var(--color-card))]">
               <th className="pl-6 pr-4">Effective</th>
               <th className="pr-4">Base pay</th>
               <th className="pr-4">Total comp</th>
