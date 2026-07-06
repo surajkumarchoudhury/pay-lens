@@ -19,7 +19,6 @@ import { formatMonthYear, formatShortDate, formatTenure } from "@/lib/date";
 import { revealedColumns } from "@/lib/employee-columns";
 import { genderLabel } from "@/lib/employee-gender";
 import type { CurrencyOption, EmployeeRow, SortDir } from "@/lib/employees";
-import { resultsToken } from "@/lib/employees-url";
 import { formatMoney, fromUsd } from "@/lib/money";
 
 declare module "@tanstack/react-table" {
@@ -38,22 +37,14 @@ export function EmployeesTable({
   sortBy,
   sortDir,
   currencies,
-  renderedToken,
 }: {
   rows: EmployeeRow[];
   sortBy: string | null;
   sortDir: SortDir;
   currencies: CurrencyOption[];
-  /** Params token this data was rendered for; stale vs the URL ⇒ loading. */
-  renderedToken: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-
-  // While a navigation is in flight the table stays mounted showing the old
-  // rows; the live URL token diverges from what this data was rendered for, so
-  // we overlay a body-only loading state (the header stays constant).
-  const isLoading = resultsToken((k) => searchParams.get(k)) !== renderedToken;
 
   // Column order + visibility come from the shared settings context (persisted
   // to localStorage, driven by the "Manage columns" popover in the toolbar).
@@ -245,7 +236,6 @@ export function EmployeesTable({
       onColumnOrderChange={setOrder}
       onColumnVisibilityChange={setVisibility}
       pinnedColumnId="name"
-      isLoading={isLoading}
       onRowClick={(row) => router.push(`/employees/${row.id}`)}
     />
   );

@@ -2,22 +2,58 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { FileDown, Loader2 } from "lucide-react";
+import { FileDown } from "lucide-react";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
+import { Spinner } from "../ui/spinner";
 
 type Rgb = [number, number, number];
 
-const BRAND: Rgb = [30, 58, 138]; // navy #1e3a8a
 const WHITE: Rgb = [255, 255, 255];
 const SUBTITLE: Rgb = [203, 213, 225]; // slate-300
 const MUTED: Rgb = [148, 163, 184]; // slate-400
-const DIVIDER: Rgb = [226, 232, 240]; // slate-200
+
+// Fallbacks mirror the light-theme --nav-from / --nav-to in globals.css, used
+// only if the CSS variables can't be read at export time.
+const NAV_FROM_FALLBACK: Rgb = [0, 62, 122]; // #003e7a
+const NAV_TO_FALLBACK: Rgb = [18, 86, 152]; // #125698
 
 /** Pull the first three numbers out of an rgb()/rgba() string. */
 function parseRgb(input: string): Rgb {
   const nums = input.match(/\d+(\.\d+)?/g)?.map(Number) ?? [255, 255, 255];
   return [nums[0] ?? 255, nums[1] ?? 255, nums[2] ?? 255];
+}
+
+/** Parse a #rgb / #rrggbb hex string into an Rgb triple. */
+function hexToRgb(hex: string): Rgb {
+  const h = hex.trim().replace(/^#/, "");
+  const full =
+    h.length === 3
+      ? h
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : h;
+  const n = Number.parseInt(full, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** Read a CSS custom property off <html> and resolve it to an Rgb triple. */
+function cssVarRgb(name: string, fallback: Rgb): Rgb {
+  const raw = getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim();
+  if (!raw) return fallback;
+  return raw.startsWith("#") ? hexToRgb(raw) : parseRgb(raw);
+}
+
+/** Linear interpolation between two colors (t in [0,1]). */
+function lerpRgb(a: Rgb, b: Rgb, t: number): Rgb {
+  return [
+    a[0] + (b[0] - a[0]) * t,
+    a[1] + (b[1] - a[1]) * t,
+    a[2] + (b[2] - a[2]) * t,
+  ];
 }
 
 /** Narrow, portrait-friendly width used only while rendering the PDF capture. */
@@ -32,6 +68,7 @@ const CAPTURE_WIDTH = 820;
 function applyPrintLayout(node: HTMLElement): () => void {
   const kpis = node.querySelector<HTMLElement>('[data-pdf-grid="kpis"]');
   const charts = node.querySelector<HTMLElement>('[data-pdf-grid="charts"]');
+  const payPair = node.querySelector<HTMLElement>('[data-pdf-grid="pay-pair"]');
 
   const saved: Array<[HTMLElement, string]> = [[node, node.style.cssText]];
   node.style.width = `${CAPTURE_WIDTH}px`;
@@ -44,6 +81,13 @@ function applyPrintLayout(node: HTMLElement): () => void {
   if (charts) {
     saved.push([charts, charts.style.cssText]);
     charts.style.gridTemplateColumns = "1fr";
+  }
+  if (payPair) {
+    // Keep the Pay-by-level / Pay-by-country cards side by side in the capture
+    // regardless of the live viewport width (their md:grid-cols-2 tracks the
+    // viewport, not this fixed-width node).
+    saved.push([payPair, payPair.style.cssText]);
+    payPair.style.gridTemplateColumns = "repeat(2, minmax(0, 1fr))";
   }
 
   // html-to-image's SVG-foreignObject render path mis-paints color-mix()/oklch
@@ -113,6 +157,17 @@ export function ExportDashboardPdf({
       // transparent (which prints as black in some PDF viewers).
       const bg = parseRgb(getComputedStyle(document.body).backgroundColor);
 
+      // Theme-aware chrome: the header band reuses the app's live navy gradient
+      // (--nav-from → --nav-to, which darkens in dark mode), and the footer
+      // divider is a light hairline in light mode but a subtle bg-relative line
+      // in dark mode (a fixed light slate line would read as a harsh streak).
+      const isDark = document.documentElement.classList.contains("dark");
+      const navFrom = cssVarRgb("--nav-from", NAV_FROM_FALLBACK);
+      const navTo = cssVarRgb("--nav-to", NAV_TO_FALLBACK);
+      const divider: Rgb = isDark
+        ? lerpRgb(bg, WHITE, 0.18)
+        : [226, 232, 240]; // slate-200
+
       const dataUrl = await toPng(node, {
         cacheBust: true,
         pixelRatio: 2,
@@ -162,9 +217,16 @@ export function ExportDashboardPdf({
         pdf.rect(0, 0, pageW, contentTop, "F");
         pdf.rect(0, contentBottom, pageW, pageH - contentBottom, "F");
 
-        // 3) Branded header band.
-        pdf.setFillColor(BRAND[0], BRAND[1], BRAND[2]);
-        pdf.rect(0, 0, pageW, headerH, "F");
+        // 3) Branded header band — the app's navy chrome gradient, painted as
+        // vertical slices (jsPDF has no native linear gradient). Slices overlap
+        // by 0.5pt so no seams show between them.
+        const SLICES = 48;
+        const sliceW = pageW / SLICES;
+        for (let i = 0; i < SLICES; i++) {
+          const c = lerpRgb(navFrom, navTo, i / (SLICES - 1));
+          pdf.setFillColor(c[0], c[1], c[2]);
+          pdf.rect(i * sliceW, 0, sliceW + 0.5, headerH, "F");
+        }
 
         pdf.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
         pdf.setFont("helvetica", "bold");
@@ -185,7 +247,7 @@ export function ExportDashboardPdf({
         });
 
         // 4) Footer: divider + confidential note + page numbers.
-        pdf.setDrawColor(DIVIDER[0], DIVIDER[1], DIVIDER[2]);
+        pdf.setDrawColor(divider[0], divider[1], divider[2]);
         pdf.setLineWidth(0.5);
         pdf.line(margin, contentBottom + 8, pageW - margin, contentBottom + 8);
 
@@ -215,7 +277,7 @@ export function ExportDashboardPdf({
         className="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xs border border-input px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
       >
         {busy ? (
-          <Loader2 className="size-4 animate-spin" />
+          <Spinner/>
         ) : (
           <FileDown className="size-4" />
         )}
@@ -238,7 +300,7 @@ export function ExportDashboardPdf({
               height: overlayRect.height,
             }}
           >
-            <Loader2 className="size-8 animate-spin text-primary" />
+            <Spinner className="size-10" />
             <p className="text-sm font-medium text-muted-foreground">
               Exporting PDF…
             </p>

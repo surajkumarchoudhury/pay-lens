@@ -137,7 +137,7 @@ export default async function DashboardPage() {
           />
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
+        <div data-pdf-grid="pay-pair" className="grid gap-3 md:grid-cols-2">
           <PayBreakdownCard
             title="Pay by level"
             description="Annual total comp (USD) · click a row to view employees"

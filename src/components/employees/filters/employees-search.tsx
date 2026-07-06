@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Check, ChevronDown, Loader2, Search, X } from "lucide-react";
+import { Check, ChevronDown, Search, X } from "lucide-react";
 
 import { Avatar } from "@/components/ui/avatar";
 import { useDebouncedSuggestions } from "@/hooks/use-debounced-suggestions";
@@ -15,6 +15,7 @@ import {
   type SearchFieldId,
   type SearchSuggestion,
 } from "@/lib/employee-search";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * Employee search. Two coupled controls:
@@ -170,7 +171,7 @@ export function EmployeesSearch({
                 aria-busy
                 className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground"
               >
-                <Loader2 className="size-4 animate-spin" />
+                <Spinner />
                 Loading…
               </li>
             ) : suggestions.length === 0 ? (

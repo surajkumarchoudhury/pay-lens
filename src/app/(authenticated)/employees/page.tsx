@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { cookies } from "next/headers";
 
 import { ColumnSettingsProvider } from "@/components/employees/column-settings";
@@ -8,7 +7,6 @@ import {
 } from "@/lib/employee-columns";
 import { EmployeeFilters } from "@/components/employees/filters/employee-filters";
 import { EmployeesTable } from "@/components/employees/employees-table";
-import { EmployeesTableSkeleton } from "@/components/employees/employees-table-skeleton";
 import { TablePagination } from "@/components/table-pagination";
 import { getSession } from "@/lib/auth/session";
 import { parseGenders } from "@/lib/employee-gender";
@@ -16,7 +14,6 @@ import { parseLevels } from "@/lib/employee-level";
 import { resolveSearchField } from "@/lib/employee-search";
 import { parseStatuses } from "@/lib/employee-status";
 import { parseWorkMode } from "@/lib/employee-work-mode";
-import { resultsToken } from "@/lib/employees-url";
 import { first, parsePage, parsePageSize } from "@/lib/search-params";
 import {
   getCurrencies,
@@ -114,14 +111,6 @@ export default async function EmployeesPage({
     effectiveDateTo,
   };
 
-  // Token of the params this render was built for. The client table compares it
-  // against the live URL to show a body-only loading state (keeping the header)
-  // while a navigation is in flight. The skeleton below only covers first load.
-  const renderedToken = resultsToken((k) => {
-    const v = sp[k];
-    return Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
-  });
-
   return (
     <ColumnSettingsProvider initialState={columnLayout}>
       <div className="flex h-full flex-col">
@@ -151,13 +140,7 @@ export default async function EmployeesPage({
           />
         </div>
 
-        <Suspense fallback={<EmployeesTableSkeleton />}>
-          <EmployeesResults
-            filters={filters}
-            currencies={currencies}
-            renderedToken={renderedToken}
-          />
-        </Suspense>
+        <EmployeesResults filters={filters} currencies={currencies} />
       </div>
     </ColumnSettingsProvider>
   );
@@ -166,11 +149,9 @@ export default async function EmployeesPage({
 async function EmployeesResults({
   filters,
   currencies,
-  renderedToken,
 }: {
   filters: ListEmployeesParams;
   currencies: CurrencyOption[];
-  renderedToken: string;
 }) {
   const { rows, total, page, pageSize, pageCount, sortBy, sortDir } =
     await listEmployees(filters);
@@ -191,7 +172,6 @@ async function EmployeesResults({
           sortBy={sortBy}
           sortDir={sortDir}
           currencies={currencies}
-          renderedToken={renderedToken}
         />
       </div>
       <div className="-mx-4 shrink-0 border-t bg-background px-6 pt-3">
