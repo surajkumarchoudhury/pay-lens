@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 
 import { ChartCard, type CsvExport } from "@/components/analytics/chart-card";
-import type { PayBreakdownRow } from "@/lib/analytics";
+import type { PayBreakdownRow } from "@/lib/pay-breakdown";
 import { formatCompactMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
