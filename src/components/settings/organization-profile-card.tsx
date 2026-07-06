@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Pencil } from "lucide-react";
 
+import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -12,6 +13,7 @@ import { cn } from "@/lib/utils";
 
 type Props = {
   name: string;
+  avatarUrl: string | null;
   baseCurrency: string;
   employeeCount: number;
   departmentCount: number;
@@ -28,9 +30,10 @@ function formatDate(iso: string): string {
   });
 }
 
-function currencyLabel(currencies: CurrencyOption[], code: string): string {
+/** Compact base-currency label for the pill, e.g. "USD ($)". */
+function compactCurrency(currencies: CurrencyOption[], code: string): string {
   const c = currencies.find((x) => x.code === code);
-  return c ? `${c.code} · ${c.name} (${c.symbol})` : code;
+  return c ? `${c.code} (${c.symbol})` : code;
 }
 
 /**
@@ -40,6 +43,7 @@ function currencyLabel(currencies: CurrencyOption[], code: string): string {
  */
 export function OrganizationProfileCard({
   name,
+  avatarUrl,
   baseCurrency,
   employeeCount,
   departmentCount,
@@ -50,84 +54,92 @@ export function OrganizationProfileCard({
   const [editing, setEditing] = useState(false);
 
   return (
-    <section>
-      <div className="mb-3 flex items-center justify-between gap-4">
-        <h2 className="text-base font-semibold text-foreground">
-          Organization profile
-        </h2>
-        {canEdit && !editing && (
-          <Tooltip label="Edit organization">
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              aria-label="Edit organization"
-              className="rounded-xs p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <Pencil className="size-4" />
-            </button>
-          </Tooltip>
-        )}
-      </div>
+    <div className="relative rounded-xs border border-border/60 bg-card p-5">
+      {canEdit && !editing && (
+        <Tooltip label="Edit organization">
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            aria-label="Edit organization"
+            className="absolute right-3 top-3 rounded-xs p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Pencil className="size-4" />
+          </button>
+        </Tooltip>
+      )}
 
-      <div className="rounded-xs border border-border/60 bg-card p-6">
-        {editing ? (
-          <EditForm
+      {editing ? (
+        <EditForm
+          name={name}
+          avatarUrl={avatarUrl}
+          baseCurrency={baseCurrency}
+          currencies={currencies}
+          onDone={() => setEditing(false)}
+        />
+      ) : (
+        <>
+          <Avatar
             name={name}
-            baseCurrency={baseCurrency}
-            currencies={currencies}
-            onDone={() => setEditing(false)}
+            src={avatarUrl}
+            className="size-20 rounded-xs text-2xl"
           />
-        ) : (
-          <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-            <Field label="Organization name" value={name} />
-            <Field
-              label="Base currency"
-              value={currencyLabel(currencies, baseCurrency)}
-              hint="Reporting currency for normalized figures"
+          <h2 className="mt-4 text-lg font-semibold leading-tight text-foreground">
+            {name}
+          </h2>
+          <div className="mt-2">
+            <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+              Base currency · {compactCurrency(currencies, baseCurrency)}
+            </span>
+          </div>
+
+          <div className="my-4 border-t border-border/60" />
+
+          <dl className="space-y-0.5">
+            <InfoRow
+              label="Employees"
+              value={employeeCount.toLocaleString("en-US")}
             />
-            <Field label="Employees" value={employeeCount.toLocaleString("en-US")} />
-            <Field
+            <InfoRow
               label="Departments"
               value={departmentCount.toLocaleString("en-US")}
             />
-            <Field label="Created" value={formatDate(createdAt)} />
-          </div>
-        )}
-      </div>
-    </section>
+            <InfoRow label="Created" value={formatDate(createdAt)} />
+          </dl>
+        </>
+      )}
+    </div>
   );
 }
 
-function Field({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-}) {
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 text-sm font-medium text-foreground">{value}</div>
-      {hint && <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div>}
+    <div className="flex items-baseline justify-between gap-3 py-1 text-sm">
+      <span className="shrink-0 text-muted-foreground">{label}</span>
+      <span
+        className="min-w-0 truncate text-right font-medium text-foreground"
+        title={value}
+      >
+        {value}
+      </span>
     </div>
   );
 }
 
 function EditForm({
   name: initialName,
+  avatarUrl: initialAvatarUrl,
   baseCurrency: initialCurrency,
   currencies,
   onDone,
 }: {
   name: string;
+  avatarUrl: string | null;
   baseCurrency: string;
   currencies: CurrencyOption[];
   onDone: () => void;
 }) {
   const [name, setName] = useState(initialName);
+  const [avatarUrl, setAvatarUrl] = useState(initialAvatarUrl ?? "");
   const [baseCurrency, setBaseCurrency] = useState(initialCurrency);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -148,50 +160,74 @@ function EditForm({
 
   return (
     <form action={submit} className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
+      <div className="flex flex-col items-center gap-3">
+        <Avatar
+          name={name || "Organization"}
+          src={avatarUrl || null}
+          className="size-20 rounded-xs text-2xl"
+        />
+        <div className="w-full">
           <label
-            htmlFor="org-name"
+            htmlFor="org-avatar"
             className="mb-1.5 block text-xs font-medium text-foreground"
           >
-            Organization name
+            Logo URL
           </label>
           <Input
-            id="org-name"
-            name="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={120}
+            id="org-avatar"
+            name="avatarUrl"
+            type="url"
+            inputMode="url"
+            placeholder="https://…"
+            value={avatarUrl}
+            onChange={(e) => setAvatarUrl(e.target.value)}
             autoComplete="off"
           />
-        </div>
-
-        <div>
-          <label
-            htmlFor="org-currency"
-            className="mb-1.5 block text-xs font-medium text-foreground"
-          >
-            Base currency
-          </label>
-          <select
-            id="org-currency"
-            name="baseCurrency"
-            value={baseCurrency}
-            onChange={(e) => setBaseCurrency(e.target.value)}
-            className={cn(
-              "flex h-10 w-full cursor-pointer rounded-xs border border-input bg-transparent px-3 py-2 text-sm transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
-            )}
-          >
-            {currencies.map((c) => (
-              <option key={c.code} value={c.code}>
-                {c.code} · {c.name} ({c.symbol})
-              </option>
-            ))}
-          </select>
           <p className="mt-1.5 text-xs text-muted-foreground">
-            Used as the reporting currency for cross-currency figures.
+            Leave blank to use the name initials.
           </p>
         </div>
+      </div>
+
+      <div>
+        <label
+          htmlFor="org-name"
+          className="mb-1.5 block text-xs font-medium text-foreground"
+        >
+          Organization name
+        </label>
+        <Input
+          id="org-name"
+          name="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={120}
+          autoComplete="off"
+        />
+      </div>
+
+      <div>
+        <label
+          htmlFor="org-currency"
+          className="mb-1.5 block text-xs font-medium text-foreground"
+        >
+          Base currency
+        </label>
+        <select
+          id="org-currency"
+          name="baseCurrency"
+          value={baseCurrency}
+          onChange={(e) => setBaseCurrency(e.target.value)}
+          className={cn(
+            "flex h-10 w-full cursor-pointer rounded-xs border border-input bg-transparent px-3 py-2 text-sm transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
+          )}
+        >
+          {currencies.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.code} · {c.name} ({c.symbol})
+            </option>
+          ))}
+        </select>
       </div>
 
       {error && (

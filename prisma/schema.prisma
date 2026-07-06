@@ -15,6 +15,7 @@ datasource db {
 model Organization {
   id           String   @id @default(cuid())
   name         String
+  avatarUrl    String?
   baseCurrency String   @default("USD")
   createdAt    DateTime @default(now())
 }

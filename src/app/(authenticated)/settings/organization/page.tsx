@@ -14,7 +14,7 @@ export default async function OrganizationSettingsPage() {
   const canEdit = user?.role === "HR_MANAGER";
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 pb-8">
+    <div className="max-w-6xl space-y-6 pb-8">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">
           Organization settings
@@ -25,21 +25,29 @@ export default async function OrganizationSettingsPage() {
       </div>
 
       {org ? (
-        <>
-          <OrganizationProfileCard
-            name={org.name}
-            baseCurrency={org.baseCurrency}
-            employeeCount={org.employeeCount}
-            departmentCount={org.departmentCount}
-            createdAt={org.createdAt}
-            currencies={currencies}
-            canEdit={canEdit}
-          />
-          <ExchangeRatesCard
-            currencies={currencies}
-            baseCurrency={org.baseCurrency}
-          />
-        </>
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+          {/* Left: organization inspector. Sticky so it stays in view while the
+              exchange-rate table scrolls on the right. */}
+          <aside className="shrink-0 lg:sticky lg:top-0 lg:w-80">
+            <OrganizationProfileCard
+              name={org.name}
+              avatarUrl={org.avatarUrl}
+              baseCurrency={org.baseCurrency}
+              employeeCount={org.employeeCount}
+              departmentCount={org.departmentCount}
+              createdAt={org.createdAt}
+              currencies={currencies}
+              canEdit={canEdit}
+            />
+          </aside>
+
+          <div className="min-w-0 flex-1">
+            <ExchangeRatesCard
+              currencies={currencies}
+              baseCurrency={org.baseCurrency}
+            />
+          </div>
+        </div>
       ) : (
         <div className="rounded-xs border border-dashed p-12 text-center text-sm text-muted-foreground">
           No organization configured. Run the database seed to get started.

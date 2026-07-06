@@ -197,7 +197,7 @@ export function DataTable<T extends RowData>({
               key={row.id}
               onClick={onRowClick ? () => onRowClick(row.original) : undefined}
               className={cn(
-                "group border-b border-border/60 transition-colors last:border-0 hover:bg-[color-mix(in_oklab,var(--color-muted)_40%,var(--color-card))]",
+                "group border-b border-border/60 transition-colors hover:bg-[color-mix(in_oklab,var(--color-muted)_40%,var(--color-card))]",
                 onRowClick && "cursor-pointer",
               )}
             >

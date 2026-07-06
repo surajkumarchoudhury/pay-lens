@@ -16,6 +16,14 @@ const schema = z.object({
     .min(1, "Name is required")
     .max(120, "Name is too long"),
   baseCurrency: z.string().trim().min(1, "Select a base currency"),
+  // Optional logo URL. Empty string clears it; when present it must be a URL.
+  avatarUrl: z
+    .string()
+    .trim()
+    .max(2048, "URL is too long")
+    .url("Enter a valid URL")
+    .optional()
+    .or(z.literal("")),
 });
 
 /**
@@ -33,14 +41,17 @@ export async function updateOrganization(
   const parsed = schema.safeParse({
     name: formData.get("name"),
     baseCurrency: formData.get("baseCurrency"),
+    avatarUrl: formData.get("avatarUrl"),
   });
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
   const { name, baseCurrency } = parsed.data;
+  // Normalize empty string to null so "cleared" persists as no logo.
+  const avatarUrl = parsed.data.avatarUrl ? parsed.data.avatarUrl : null;
 
   const org = await prisma.organization.findFirst({
-    select: { id: true, name: true, baseCurrency: true },
+    select: { id: true, name: true, baseCurrency: true, avatarUrl: true },
     orderBy: { createdAt: "asc" },
   });
   if (!org) {
@@ -56,22 +67,30 @@ export async function updateOrganization(
   }
 
   // No-op guard: nothing changed, so skip the write + audit entry.
-  if (org.name === name && org.baseCurrency === baseCurrency) {
+  if (
+    org.name === name &&
+    org.baseCurrency === baseCurrency &&
+    org.avatarUrl === avatarUrl
+  ) {
     return { ok: true, error: null };
   }
 
   await prisma.$transaction(async (tx) => {
     await tx.organization.update({
       where: { id: org.id },
-      data: { name, baseCurrency },
+      data: { name, baseCurrency, avatarUrl },
     });
     await tx.auditLog.create({
       data: {
         action: "UPDATE",
         entity: "Organization",
         changedBy: user.email,
-        before: { name: org.name, baseCurrency: org.baseCurrency },
-        after: { name, baseCurrency },
+        before: {
+          name: org.name,
+          baseCurrency: org.baseCurrency,
+          avatarUrl: org.avatarUrl,
+        },
+        after: { name, baseCurrency, avatarUrl },
       },
     });
   });

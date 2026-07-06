@@ -20,7 +20,7 @@ export default async function DepartmentsPage({
   });
 
   return (
-    <div className="flex h-full flex-col gap-4">
+    <div className="space-y-4">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Departments</h1>
         <p className="text-sm text-muted-foreground">
@@ -28,9 +28,7 @@ export default async function DepartmentsPage({
         </p>
       </div>
 
-      <div className="min-h-0 flex-1 -mb-4">
-        <DepartmentsTable rows={rows} sortBy={sortBy} sortDir={sortDir} />
-      </div>
+      <DepartmentsTable rows={rows} sortBy={sortBy} sortDir={sortDir} />
     </div>
   );
 }

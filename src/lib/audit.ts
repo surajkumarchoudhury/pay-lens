@@ -42,6 +42,7 @@ const AUDIT_FIELD_LABELS: Record<string, string> = {
   basePayUsd: "Base pay (USD)",
   name: "Name",
   baseCurrency: "Base currency",
+  avatarUrl: "Logo",
 };
 // Map stored entity names to something readable in the table.
 const AUDIT_ENTITY_LABELS: Record<string, string> = {
