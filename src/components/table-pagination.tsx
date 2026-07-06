@@ -7,21 +7,23 @@ import { Pagination } from "@/components/ui/pagination";
 import { PAGE_SIZE_OPTIONS } from "@/lib/pagination";
 
 /**
- * URL wiring for the employee pager. Swaps only the `page` param and preserves
- * everything else (filters, sort, currency) by cloning the current query — so
- * callers never have to enumerate params. The presentational <Pagination/> just
- * reports which page was requested.
+ * URL wiring for any paged table. Swaps only the `page` / `pageSize` params and
+ * preserves everything else (filters, sort, etc.) by cloning the current query —
+ * so callers never enumerate params. The presentational <Pagination/> just
+ * reports the requested page/size. `noun` sets the "of N …" label per table.
  */
-export function EmployeesPagination({
+export function TablePagination({
   page,
   pageSize,
   total,
   pageCount,
+  noun = "employees",
 }: {
   page: number;
   pageSize: number;
   total: number;
   pageCount: number;
+  noun?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -52,6 +54,7 @@ export function EmployeesPagination({
       onPageSizeChange={onPageSizeChange}
       pageSizeOptions={PAGE_SIZE_OPTIONS}
       isPending={isPending}
+      noun={noun}
     />
   );
 }

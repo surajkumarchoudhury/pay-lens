@@ -71,6 +71,7 @@ export async function recordCompensationChange(
           frequencyId: true,
           basePay: true,
           totalComp: true,
+          compaRatio: true,
           frequency: { select: { annualFactor: true } },
           currency: { select: { rateToUsd: true } },
         },
@@ -152,6 +153,7 @@ export async function recordCompensationChange(
             recordId: currentRecord.id,
             basePay: currentRecord.basePay.toString(),
             totalComp: currentRecord.totalComp.toString(),
+            compaRatio: currentRecord.compaRatio?.toString() ?? null,
           },
           after: {
             recordId: created.id,

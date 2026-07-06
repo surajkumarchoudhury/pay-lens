@@ -58,6 +58,7 @@ export function Pagination({
   onPageSizeChange,
   pageSizeOptions,
   isPending = false,
+  noun = "employees",
 }: {
   page: number;
   pageSize: number;
@@ -67,6 +68,8 @@ export function Pagination({
   onPageSizeChange: (size: number) => void;
   pageSizeOptions: readonly number[];
   isPending?: boolean;
+  /** Plural noun for the "of N …" label (e.g. "employees", "changes"). */
+  noun?: string;
 }) {
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
@@ -91,7 +94,7 @@ export function Pagination({
         />
         &nbsp;of&nbsp;
         <span className="font-medium text-foreground">{total}</span>
-        &nbsp;employees
+        &nbsp;{noun}
       </p>
 
       <nav className="flex items-center gap-1" aria-label="Pagination">

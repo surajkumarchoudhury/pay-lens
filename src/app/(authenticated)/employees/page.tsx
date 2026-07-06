@@ -1,7 +1,7 @@
 import { ColumnSettingsProvider } from "@/components/employees/column-settings";
 import { EmployeeFilters } from "@/components/employees/filters/employee-filters";
-import { EmployeesPagination } from "@/components/employees/employees-pagination";
 import { EmployeesTable } from "@/components/employees/employees-table";
+import { TablePagination } from "@/components/table-pagination";
 import { parseLevels } from "@/lib/employee-level";
 import { resolveSearchField } from "@/lib/employee-search";
 import { parseStatuses } from "@/lib/employee-status";
@@ -135,7 +135,7 @@ export default async function EmployeesPage({
               />
             </div>
             <div className="-mx-4 shrink-0 border-t bg-background px-6 pt-3">
-              <EmployeesPagination
+              <TablePagination
                 page={page}
                 pageSize={pageSize}
                 total={total}

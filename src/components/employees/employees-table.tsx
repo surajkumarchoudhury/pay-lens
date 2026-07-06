@@ -1,20 +1,13 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  type ColumnDef,
-  type RowData,
-  type SortingState,
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-} from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
+import { useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { type ColumnDef, type RowData } from "@tanstack/react-table";
 
 import Link from "next/link";
 
 import { Avatar } from "@/components/ui/avatar";
+import { DataTable } from "@/components/ui/data-table";
 import {
   CompaBadge,
   StatusBadge,
@@ -24,18 +17,13 @@ import { useCurrencyParam } from "@/components/employees/currency-select";
 import { useColumnSettings } from "@/components/employees/column-settings";
 import type { CurrencyOption, EmployeeRow, SortDir } from "@/lib/employees";
 import { formatMoney, fromUsd } from "@/lib/money";
-import { cn } from "@/lib/utils";
 
 declare module "@tanstack/react-table" {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  interface ColumnMeta<TData extends RowData, TValue> {
-    align?: "right";
-  }
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface TableMeta<TData extends RowData> {
     // Currency the salary column renders in; null shows each row's own
     // (local) currency.
-    displayCurrency: CurrencyOption | null;
+    displayCurrency?: CurrencyOption | null;
   }
 }
 
@@ -83,8 +71,6 @@ export function EmployeesTable({
   currencies: CurrencyOption[];
 }) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   // Column order + visibility come from the shared settings context (persisted
   // to localStorage, driven by the "Manage columns" popover in the toolbar).
@@ -101,27 +87,6 @@ export function EmployeesTable({
   const displayCurrency = displayCode
     ? (currencies.find((c) => c.code === displayCode) ?? null)
     : null;
-
-  const sorting: SortingState = sortBy
-    ? [{ id: sortBy, desc: sortDir === "desc" }]
-    : [];
-
-  const applySorting = useCallback(
-    (next: SortingState) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (next.length === 0) {
-        params.delete("sort");
-        params.delete("dir");
-      } else {
-        params.set("sort", next[0].id);
-        params.set("dir", next[0].desc ? "desc" : "asc");
-      }
-      // A new sort order invalidates the current page offset.
-      params.delete("page");
-      router.push(`${pathname}?${params.toString()}`);
-    },
-    [router, pathname, searchParams],
-  );
 
   const columns: ColumnDef<EmployeeRow>[] = useMemo(() => [
     {
@@ -264,136 +229,19 @@ export function EmployeesTable({
     },
   ], []);
 
-  // TanStack Table returns non-memoizable functions; React Compiler correctly
-  // skips this component (see the "use no memo" directive above). This silences
-  // the accompanying advisory lint.
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const table = useReactTable({
-    data: rows,
-    columns,
-    state: { sorting, columnOrder, columnVisibility },
-    meta: { displayCurrency },
-    manualPagination: true,
-    manualSorting: true,
-    getCoreRowModel: getCoreRowModel(),
-    onSortingChange: (updater) => {
-      const next = typeof updater === "function" ? updater(sorting) : updater;
-      applySorting(next);
-    },
-    onColumnOrderChange: (updater) => {
-      setOrder(typeof updater === "function" ? updater(columnOrder) : updater);
-    },
-    onColumnVisibilityChange: (updater) => {
-      setVisibility(
-        typeof updater === "function" ? updater(columnVisibility) : updater,
-      );
-    },
-  });
-
-  // Sum of the visible columns' widths so the table shrinks when columns are
-  // hidden (instead of a fixed min-width that would leave dead space).
-  const minWidth = table
-    .getVisibleLeafColumns()
-    .reduce((sum, col) => sum + col.getSize(), 0);
-
   return (
-    <div className="h-full overflow-auto rounded-xs border border-border/60 bg-card">
-      <table
-        className="w-full table-fixed text-sm text-foreground"
-        style={{ minWidth }}
-      >
-        <thead className="sticky top-0 z-20">
-          {table.getHeaderGroups().map((headerGroup) => (
-            <tr
-              key={headerGroup.id}
-              className="text-left text-sm font-semibold text-foreground"
-            >
-              {headerGroup.headers.map((header) => {
-                const canSort = header.column.getCanSort();
-                const sorted = header.column.getIsSorted();
-                const align = header.column.columnDef.meta?.align;
-                const pinned = header.column.id === "name";
-                return (
-                  <th
-                    key={header.id}
-                    style={{ width: header.getSize() }}
-                    className={cn(
-                      // Subtle primary tint; opaque so scrolled rows don't bleed
-                      // through the sticky header.
-                      "h-10 border-b border-r border-border/60 bg-[color-mix(in_oklab,var(--color-primary)_5%,var(--color-card))] px-4 font-semibold last:border-r-0",
-                      pinned && "sticky left-0 z-30",
-                      align === "right" && "text-right",
-                    )}
-                  >
-                    {canSort ? (
-                      <div
-                        className={cn(
-                          "flex items-center gap-2",
-                          align === "right" && "justify-end",
-                        )}
-                      >
-                        <button
-                          type="button"
-                          onClick={header.column.getToggleSortingHandler()}
-                          className="inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-primary"
-                        >
-                          {flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
-                          {sorted === "asc" ? (
-                            <ChevronUp className="size-3.5" />
-                          ) : sorted === "desc" ? (
-                            <ChevronDown className="size-3.5" />
-                          ) : (
-                            <ChevronsUpDown className="size-3.5 text-muted-foreground/60" />
-                          )}
-                        </button>
-                      </div>
-                    ) : (
-                      flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      )
-                    )}
-                  </th>
-                );
-              })}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {table.getRowModel().rows.map((row) => (
-            <tr
-              key={row.id}
-              onClick={() => router.push(`/employees/${row.original.id}`)}
-              className="group cursor-pointer border-b border-border/60 transition-colors last:border-0 hover:bg-[color-mix(in_oklab,var(--color-muted)_40%,var(--color-card))]"
-            >
-              {row.getVisibleCells().map((cell) => {
-                const pinned = cell.column.id === "name";
-                return (
-                  <td
-                    key={cell.id}
-                    style={{ width: cell.column.getSize() }}
-                    className={cn(
-                      "h-11 border-r border-border/60 px-4 last:border-r-0",
-                      // Opaque backgrounds (not /alpha) so horizontally-scrolled
-                      // content never shows through the pinned column, including
-                      // on hover where a translucent tint would let it bleed.
-                      pinned &&
-                        "sticky left-0 z-10 bg-card group-hover:bg-[color-mix(in_oklab,var(--color-muted)_40%,var(--color-card))]",
-                      cell.column.columnDef.meta?.align === "right" &&
-                        "text-right",
-                    )}
-                  >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable<EmployeeRow>
+      data={rows}
+      columns={columns}
+      sortBy={sortBy}
+      sortDir={sortDir}
+      meta={{ displayCurrency }}
+      columnOrder={columnOrder}
+      columnVisibility={columnVisibility}
+      onColumnOrderChange={setOrder}
+      onColumnVisibilityChange={setVisibility}
+      pinnedColumnId="name"
+      onRowClick={(row) => router.push(`/employees/${row.id}`)}
+    />
   );
 }
