@@ -23,7 +23,7 @@ No public sign-up — users are provisioned (login-only, appropriate for sensiti
 
 ![Dashboard — dark](docs/screenshots/dashboard-dark.png)
 
-![Settings / exchange rates — light](docs/screenshots/settings-light.png)
+![Employees — light](docs/screenshots/employees-light.png)
 
 ## Features
 

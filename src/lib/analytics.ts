@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { prisma } from "@/lib/prisma";
 import { buildPayBreakdowns, type PayBreakdowns } from "@/lib/pay-breakdown";
 
@@ -47,22 +49,24 @@ export type DepartmentHeadcount = {
 /** Workforce headcount per gender. */
 export type GenderBreakdown = { gender: string; count: number };
 
-export async function getGenderBreakdown(): Promise<GenderBreakdown[]> {
-  const grouped = await prisma.employee.groupBy({
-    by: ["gender"],
-    where: { status: { not: "TERMINATED" } },
-    _count: { _all: true },
-  });
-  return grouped.map((g) => ({ gender: g.gender, count: g._count._all }));
-}
+export const getGenderBreakdown = cache(
+  async (): Promise<GenderBreakdown[]> => {
+    const grouped = await prisma.employee.groupBy({
+      by: ["gender"],
+      where: { status: { not: "TERMINATED" } },
+      _count: { _all: true },
+    });
+    return grouped.map((g) => ({ gender: g.gender, count: g._count._all }));
+  },
+);
 
 /**
  * Active + on-leave headcount per department, largest first. Empty departments
  * are omitted (a groupBy only yields departments that have matching employees).
  */
-export async function getHeadcountByDepartment(): Promise<
+export const getHeadcountByDepartment = cache(async (): Promise<
   DepartmentHeadcount[]
-> {
+> => {
   const [grouped, departments] = await Promise.all([
     prisma.employee.groupBy({
       by: ["departmentId"],
@@ -81,7 +85,7 @@ export async function getHeadcountByDepartment(): Promise<
       headcount: g._count._all,
     }))
     .sort((a, b) => b.headcount - a.headcount);
-}
+});
 
 /**
  * Pay distribution (min / median / p90 / max / mean) of current total comp, in
@@ -94,7 +98,7 @@ export async function getHeadcountByDepartment(): Promise<
  * single group ever grew to millions this would move to a DB-side ordered-set
  * aggregate.
  */
-export async function getPayBreakdowns(): Promise<PayBreakdowns> {
+export const getPayBreakdowns = cache(async (): Promise<PayBreakdowns> => {
   const [records, departments, countries] = await Promise.all([
     prisma.salaryRecord.findMany({
       where: { isCurrent: true, employee: { status: { not: "TERMINATED" } } },
@@ -124,9 +128,9 @@ export async function getPayBreakdowns(): Promise<PayBreakdowns> {
       countryName: (iso2) => countryName.get(iso2) ?? iso2,
     },
   );
-}
+});
 
-export async function getDashboardStats(): Promise<DashboardStats> {
+export const getDashboardStats = cache(async (): Promise<DashboardStats> => {
   // Workforce = everyone not terminated; comp reads their current salary record.
   const employeeWhere = { status: { not: "TERMINATED" as const } };
   const salaryWhere = {
@@ -194,4 +198,4 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     belowBandPct: pct(belowBandCount),
     aboveBandCount,
   };
-}
+});
