@@ -105,30 +105,6 @@ function applyPrintLayout(node: HTMLElement): () => void {
   };
 }
 
-/**
- * Resolve once no streaming skeletons remain inside the report (sections use a
- * `data-report-skeleton` marker while their Suspense boundary is pending), so we
- * never screenshot a half-loaded dashboard. Falls through after `timeoutMs` as a
- * safety net.
- */
-function waitForContent(node: HTMLElement, timeoutMs = 8000): Promise<void> {
-  return new Promise((resolve) => {
-    if (!node.querySelector("[data-report-skeleton]")) return resolve();
-    const start = performance.now();
-    const tick = () => {
-      if (
-        !node.querySelector("[data-report-skeleton]") ||
-        performance.now() - start > timeoutMs
-      ) {
-        resolve();
-      } else {
-        setTimeout(tick, 120);
-      }
-    };
-    setTimeout(tick, 120);
-  });
-}
-
 /** Await N animation frames — gives ResizeObserver-driven charts time to settle. */
 function nextFrames(count: number): Promise<void> {
   return new Promise((resolve) => {
@@ -166,10 +142,6 @@ export function ExportDashboardPdf({
     const main = node.closest("main") ?? node.parentElement;
     setOverlayRect(main?.getBoundingClientRect() ?? null);
     setBusy(true);
-
-    // Sections stream in under Suspense; if any is still loading, wait so the
-    // capture includes the whole report rather than skeleton placeholders.
-    await waitForContent(node);
 
     // Tailwind's responsive grids track the viewport, not the node — so to get a
     // print-friendly "narrow" layout (3 KPIs per row, one chart per row) we force
