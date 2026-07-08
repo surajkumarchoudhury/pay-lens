@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import type { EmployeeLevel, EmployeeStatus, Gender, Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -55,20 +56,22 @@ const SEARCH_MAP: Record<
  * table's "convert" toggle to show every salary in one comparable currency.
  * Falls back to USD if the org row or currency is somehow missing.
  */
-export async function getOrgCurrency(): Promise<{
-  code: string;
-  symbol: string;
-}> {
-  const org = await prisma.organization.findFirst({
-    select: { baseCurrency: true },
-  });
-  const code = org?.baseCurrency ?? "USD";
-  const currency = await prisma.currency.findUnique({
-    where: { code },
-    select: { symbol: true },
-  });
-  return { code, symbol: currency?.symbol ?? "$" };
-}
+export const getOrgCurrency = cache(
+  async (): Promise<{
+    code: string;
+    symbol: string;
+  }> => {
+    const org = await prisma.organization.findFirst({
+      select: { baseCurrency: true },
+    });
+    const code = org?.baseCurrency ?? "USD";
+    const currency = await prisma.currency.findUnique({
+      where: { code },
+      select: { symbol: true },
+    });
+    return { code, symbol: currency?.symbol ?? "$" };
+  },
+);
 
 export type CurrencyOption = {
   code: string;
@@ -78,7 +81,7 @@ export type CurrencyOption = {
 };
 
 /** All currencies (code, symbol, name, rate) for the currency picker. */
-export async function getCurrencies(): Promise<CurrencyOption[]> {
+export const getCurrencies = cache(async (): Promise<CurrencyOption[]> => {
   const rows = await prisma.currency.findMany({
     select: { code: true, symbol: true, name: true, rateToUsd: true },
     orderBy: { code: "asc" },
@@ -89,7 +92,7 @@ export async function getCurrencies(): Promise<CurrencyOption[]> {
     name: c.name,
     rateToUsd: Number(c.rateToUsd),
   }));
-}
+});
 
 /**
  * Whitelist of sortable columns → Prisma orderBy. Keying off a fixed map (not

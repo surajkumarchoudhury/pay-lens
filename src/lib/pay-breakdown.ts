@@ -1,20 +1,21 @@
 /**
- * Pure pay-breakdown aggregation: turn per-employee current total-comp records
- * into min/median/p90/max/mean summaries grouped by country, department and
- * level. Kept free of `server-only`/Prisma so it can be unit-tested in
- * isolation; `getPayBreakdowns` (in analytics.ts) fetches the rows + name maps
- * and delegates the grouping here.
+ * Pure shaping of pre-aggregated pay-breakdown groups: resolve group ids to
+ * display labels and order the rows. The heavy min/median/p90/max/mean
+ * aggregation runs DB-side (`percentile_cont` + `GROUP BY GROUPING SETS`, see
+ * `getPayBreakdowns` in analytics.ts); this module stays free of
+ * `server-only`/Prisma so the label + ordering logic is unit-tested in isolation.
  */
 
 import { levelLabel, type EmployeeLevelId } from "@/lib/employee-level";
-import { summarize, type Summary } from "@/lib/stats";
+import { type Summary } from "@/lib/stats";
 
-/** One employee's current total comp (USD) plus its grouping keys. */
-export type PayRecord = {
-  totalUsd: number;
-  level: string;
-  countryIso2: string;
-  departmentId: string;
+export type PayDimension = "country" | "department" | "level";
+
+/** One DB-aggregated group: its dimension, key, and USD total-comp summary. */
+export type PayGroupStat = Summary & {
+  dim: PayDimension;
+  /** ISO-2 code / department id / level enum, depending on `dim`. */
+  key: string;
 };
 
 /** Resolve group ids to display labels (falls back to the id when unknown). */
@@ -37,51 +38,44 @@ export type PayBreakdowns = {
   byLevel: PayBreakdownRow[];
 };
 
-function pushValue(map: Map<string, number[]>, key: string, value: number) {
-  const bucket = map.get(key);
-  if (bucket) bucket.push(value);
-  else map.set(key, [value]);
-}
-
-function toRows(
-  map: Map<string, number[]>,
-  label: (key: string) => string,
-): PayBreakdownRow[] {
-  return [...map.entries()].flatMap(([key, values]) => {
-    const summary = summarize(values);
-    return summary ? [{ key, name: label(key), ...summary }] : [];
-  });
-}
-
 const byMedianDesc = (a: PayBreakdownRow, b: PayBreakdownRow) =>
   b.median - a.median;
 
 /**
- * Group `records` three ways and summarize each group. Country/department rows
- * are ordered highest-median first (the interesting outliers); level rows keep
- * their L1→L7 ladder order.
+ * Split DB-aggregated group stats into the three breakdowns, attaching a
+ * human-readable label to each. Country/department rows are ordered
+ * highest-median first (the interesting outliers); level rows keep their
+ * L1→L7 ladder order.
  */
-export function buildPayBreakdowns(
-  records: PayRecord[],
+export function shapePayBreakdowns(
+  groups: PayGroupStat[],
   resolvers: PayNameResolvers,
 ): PayBreakdowns {
-  const byCountryVals = new Map<string, number[]>();
-  const byDeptVals = new Map<string, number[]>();
-  const byLevelVals = new Map<string, number[]>();
+  const byCountry: PayBreakdownRow[] = [];
+  const byDepartment: PayBreakdownRow[] = [];
+  const byLevel: PayBreakdownRow[] = [];
 
-  for (const r of records) {
-    pushValue(byCountryVals, r.countryIso2, r.totalUsd);
-    pushValue(byDeptVals, r.departmentId, r.totalUsd);
-    pushValue(byLevelVals, r.level, r.totalUsd);
+  for (const { dim, key, ...summary } of groups) {
+    if (dim === "country") {
+      byCountry.push({ key, name: resolvers.countryName(key), ...summary });
+    } else if (dim === "department") {
+      byDepartment.push({
+        key,
+        name: resolvers.departmentName(key),
+        ...summary,
+      });
+    } else {
+      byLevel.push({
+        key,
+        name: levelLabel(key as EmployeeLevelId),
+        ...summary,
+      });
+    }
   }
 
-  return {
-    byCountry: toRows(byCountryVals, resolvers.countryName).sort(byMedianDesc),
-    byDepartment: toRows(byDeptVals, resolvers.departmentName).sort(
-      byMedianDesc,
-    ),
-    byLevel: toRows(byLevelVals, (k) => levelLabel(k as EmployeeLevelId)).sort(
-      (a, b) => a.key.localeCompare(b.key),
-    ),
-  };
+  byCountry.sort(byMedianDesc);
+  byDepartment.sort(byMedianDesc);
+  byLevel.sort((a, b) => a.key.localeCompare(b.key));
+
+  return { byCountry, byDepartment, byLevel };
 }

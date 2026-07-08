@@ -1,6 +1,7 @@
 import "server-only";
 
 import { randomBytes } from "node:crypto";
+import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { UserRole } from "@prisma/client";
@@ -69,8 +70,12 @@ async function invalidate(token: string): Promise<void> {
  * Resolve the current user from the session cookie, enforcing both timeouts.
  * Returns null when there is no valid session. Safe to call in Server
  * Components: it never mutates cookies, only (throttled) the DB `lastActiveAt`.
+ *
+ * Wrapped in React `cache()` so the layout + page (+ any child components) share
+ * a single lookup per request instead of re-querying the session — and the
+ * throttled `lastActiveAt` write runs at most once per request.
  */
-export async function getSession(): Promise<SessionUser | null> {
+export const getSession = cache(async (): Promise<SessionUser | null> => {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
@@ -106,7 +111,7 @@ export async function getSession(): Promise<SessionUser | null> {
     avatarUrl: user.avatarUrl,
     role: user.role,
   };
-}
+});
 
 /** Destroy the current session (DB row + cookie). Call from a Server Action. */
 export async function destroySession(): Promise<void> {
