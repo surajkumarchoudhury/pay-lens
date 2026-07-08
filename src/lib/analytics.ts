@@ -1,7 +1,13 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { prisma } from "@/lib/prisma";
-import { buildPayBreakdowns, type PayBreakdowns } from "@/lib/pay-breakdown";
+import {
+  shapePayBreakdowns,
+  type PayBreakdowns,
+  type PayGroupStat,
+} from "@/lib/pay-breakdown";
 
 /**
  * Dashboard KPI figures. All monetary values are USD-normalized (matching the
@@ -47,22 +53,24 @@ export type DepartmentHeadcount = {
 /** Workforce headcount per gender. */
 export type GenderBreakdown = { gender: string; count: number };
 
-export async function getGenderBreakdown(): Promise<GenderBreakdown[]> {
-  const grouped = await prisma.employee.groupBy({
-    by: ["gender"],
-    where: { status: { not: "TERMINATED" } },
-    _count: { _all: true },
-  });
-  return grouped.map((g) => ({ gender: g.gender, count: g._count._all }));
-}
+export const getGenderBreakdown = cache(
+  async (): Promise<GenderBreakdown[]> => {
+    const grouped = await prisma.employee.groupBy({
+      by: ["gender"],
+      where: { status: { not: "TERMINATED" } },
+      _count: { _all: true },
+    });
+    return grouped.map((g) => ({ gender: g.gender, count: g._count._all }));
+  },
+);
 
 /**
  * Active + on-leave headcount per department, largest first. Empty departments
  * are omitted (a groupBy only yields departments that have matching employees).
  */
-export async function getHeadcountByDepartment(): Promise<
+export const getHeadcountByDepartment = cache(async (): Promise<
   DepartmentHeadcount[]
-> {
+> => {
   const [grouped, departments] = await Promise.all([
     prisma.employee.groupBy({
       by: ["departmentId"],
@@ -81,30 +89,42 @@ export async function getHeadcountByDepartment(): Promise<
       headcount: g._count._all,
     }))
     .sort((a, b) => b.headcount - a.headcount);
-}
+});
 
 /**
  * Pay distribution (min / median / p90 / max / mean) of current total comp, in
  * USD, grouped three ways: by country, department and level. The workforce
  * excludes terminated employees.
  *
- * We pull the per-record measure once and aggregate in memory (via the pure,
- * unit-tested `buildPayBreakdowns`) rather than issuing three grouped
- * `percentile_cont` queries: at ~10k current records the payload is tiny. If a
- * single group ever grew to millions this would move to a DB-side ordered-set
- * aggregate.
+ * The aggregation runs DB-side: a single pass over the current salary records
+ * uses `percentile_cont` for median/p90 and `GROUP BY GROUPING SETS` to emit all
+ * three groupings at once, so Postgres returns a few dozen summary rows instead
+ * of shipping ~10k rows to the app to sort in JS. `annualizedTotalUsd` is cast to
+ * `float8` (and `count` to `int`) so Prisma hands back plain numbers rather than
+ * Decimals/BigInts. Label resolution + ordering stays in the pure, unit-tested
+ * `shapePayBreakdowns`.
  */
-export async function getPayBreakdowns(): Promise<PayBreakdowns> {
-  const [records, departments, countries] = await Promise.all([
-    prisma.salaryRecord.findMany({
-      where: { isCurrent: true, employee: { status: { not: "TERMINATED" } } },
-      select: {
-        annualizedTotalUsd: true,
-        employee: {
-          select: { level: true, countryIso2: true, departmentId: true },
-        },
-      },
-    }),
+export const getPayBreakdowns = cache(async (): Promise<PayBreakdowns> => {
+  const [groups, departments, countries] = await Promise.all([
+    prisma.$queryRaw<PayGroupStat[]>`
+      SELECT
+        CASE
+          WHEN e."countryIso2" IS NOT NULL THEN 'country'
+          WHEN e."departmentId" IS NOT NULL THEN 'department'
+          ELSE 'level'
+        END AS dim,
+        COALESCE(e."countryIso2", e."departmentId", e."level"::text) AS key,
+        COUNT(*)::int AS count,
+        MIN(s."annualizedTotalUsd")::float8 AS min,
+        (percentile_cont(0.5) WITHIN GROUP (ORDER BY s."annualizedTotalUsd"))::float8 AS median,
+        (percentile_cont(0.9) WITHIN GROUP (ORDER BY s."annualizedTotalUsd"))::float8 AS p90,
+        MAX(s."annualizedTotalUsd")::float8 AS max,
+        AVG(s."annualizedTotalUsd")::float8 AS mean
+      FROM "SalaryRecord" s
+      JOIN "Employee" e ON e."id" = s."employeeId"
+      WHERE s."isCurrent" = true AND e."status"::text <> 'TERMINATED'
+      GROUP BY GROUPING SETS ((e."countryIso2"), (e."departmentId"), (e."level"))
+    `,
     prisma.department.findMany({ select: { id: true, name: true } }),
     prisma.country.findMany({ select: { iso2: true, name: true } }),
   ]);
@@ -112,21 +132,13 @@ export async function getPayBreakdowns(): Promise<PayBreakdowns> {
   const deptName = new Map(departments.map((d) => [d.id, d.name]));
   const countryName = new Map(countries.map((c) => [c.iso2, c.name]));
 
-  return buildPayBreakdowns(
-    records.map((r) => ({
-      totalUsd: Number(r.annualizedTotalUsd),
-      level: r.employee.level,
-      countryIso2: r.employee.countryIso2,
-      departmentId: r.employee.departmentId,
-    })),
-    {
-      departmentName: (id) => deptName.get(id) ?? id,
-      countryName: (iso2) => countryName.get(iso2) ?? iso2,
-    },
-  );
-}
+  return shapePayBreakdowns(groups, {
+    departmentName: (id) => deptName.get(id) ?? id,
+    countryName: (iso2) => countryName.get(iso2) ?? iso2,
+  });
+});
 
-export async function getDashboardStats(): Promise<DashboardStats> {
+export const getDashboardStats = cache(async (): Promise<DashboardStats> => {
   // Workforce = everyone not terminated; comp reads their current salary record.
   const employeeWhere = { status: { not: "TERMINATED" as const } };
   const salaryWhere = {
@@ -194,4 +206,4 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     belowBandPct: pct(belowBandCount),
     aboveBandCount,
   };
-}
+});

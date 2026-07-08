@@ -75,7 +75,7 @@ erDiagram
 
 - **Server-side pagination** — fetch only the visible page; never ship 10k rows to the browser.
 - **Indexes** on `countryIso2`, `departmentId`, `level`, and search columns (name/email/employeeNumber).
-- **Aggregation** — coarse metrics (counts, sums, averages, group-bys) run DB-side via Prisma `groupBy`/`aggregate` over the denormalized USD columns. Percentile/median pay breakdowns pull the ~10k current records once and compute in a pure, unit-tested stats module — at this scale the payload is tiny and the percentile math stays deterministic and testable. (A DB-side ordered-set aggregate like `percentile_cont` is the escape hatch if any single group ever reached millions of rows.)
+- **Aggregation** — coarse metrics (counts, sums, averages, group-bys) run DB-side via Prisma `groupBy`/`aggregate` over the denormalized USD columns. Percentile/median pay breakdowns run DB-side too: a single `$queryRaw` uses `percentile_cont(0.5/0.9)` with `GROUP BY GROUPING SETS` to summarize by country, department and level in one pass, so Postgres returns a few dozen summary rows instead of shipping ~10k rows to the app. Only label resolution + ordering happens in a pure, unit-tested module (`shapePayBreakdowns`); `stats.ts` keeps the equivalent interpolation math as a tested reference.
 - 10k rows is small for Postgres; the discipline is in the UI/query patterns, not raw scale.
 
 ## 5. Testing Strategy

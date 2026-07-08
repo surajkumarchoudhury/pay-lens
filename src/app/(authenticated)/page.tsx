@@ -21,6 +21,13 @@ const GENDER_META: Record<string, { label: string; color: string }> = {
 };
 const GENDER_ORDER = ["MALE", "FEMALE", "OTHER", "UNDISCLOSED"];
 
+/**
+ * Dashboard. All slices are fetched in parallel up front; the aggregates are
+ * cheap (counts/sums/group-bys DB-side, and the pay breakdowns now run as a
+ * single grouped `percentile_cont` query), so the page renders in one shot
+ * rather than streaming. Instant feedback on navigation comes from `loading.tsx`,
+ * which paints the matching skeletons while this resolves.
+ */
 export default async function DashboardPage() {
   const [stats, genderRows, headcountByDept, pay] = await Promise.all([
     getDashboardStats(),
